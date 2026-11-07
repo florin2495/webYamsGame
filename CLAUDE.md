@@ -7,7 +7,7 @@
   Local git identity is pinned in `.git/config` (Florin Radu / marchidan.florin24@gmail.com).
 - The user connects the repo to Vercel by hand. Once connected, every push to `main` deploys to production:
   https://yams.hailatat.icu (domain added in the Vercel project).
-- Functions run in `fra1` (Frankfurt, `vercel.json` `{ "regions": ["fra1"] }`), next to the Supabase DB. Never remove it:
+- `vercel.json` pins `"framework": "nextjs"` (the Vercel project was imported while the repo held only a README, so it was detected as "Other" and the build failed looking for `public/`) and `"regions": ["fra1"]`. Functions run in `fra1` (Frankfurt), next to the Supabase DB. Never remove it:
   the Vercel default `iad1` (Washington) makes every DB query cross the Atlantic. After a deploy check that the
   `X-Vercel-Id` response header of an API route reads `fra1::fra1::…`.
 - Feedback (`POST /api/feedback`) writes to `hub_feedback` (owned by `florin2495/hailataticu-hub`, slug `yams`).
