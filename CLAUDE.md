@@ -11,7 +11,7 @@
   the Vercel default `iad1` (Washington) makes every DB query cross the Atlantic. After a deploy check that the
   `X-Vercel-Id` response header of an API route reads `fra1::fra1::…`.
 - Feedback (`POST /api/feedback`) writes to `hub_feedback` (owned by `florin2495/hailataticu-hub`, slug `yams`).
-- Hub entry: `D:\_DEv\000_Startup\src\games.ts` (slug `yams`, url `https://yams.hailatat.icu`).
+- Hub entry: `D:\_DEv\000_Startup\src\games.ts` (slug `yams`, url `/yams`).
 - Ask the user before pushing (= deploying), unless they explicitly say to deploy.
 - **Before every push, bump the patch version** in `package.json` (and `npm install --package-lock-only`).
   It is shown in-game next to "Setări".
