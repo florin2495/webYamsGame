@@ -97,7 +97,8 @@ async function main() {
   check(s.room.status === "playing" && s.game.turn === 0 && s.game.seats[0].name === "Ana", "host plays first");
 
   console.log("Turns");
-  check((await call(`/api/rooms/${code}/roll`, { token: B.token, body: { held: [] } })).status === 409, "roll out of turn = 409");
+  check((await call(`/api/rooms/${code}/roll`, { token: B.token, body: { held: [] } })).status === 400, "malformed held = 400");
+  check((await call(`/api/rooms/${code}/roll`, { token: B.token, body: { held: [false, false, false, false, false] } })).status === 409, "roll out of turn = 409");
   check((await call(`/api/rooms/${code}/score`, { token: A.token, body: { category: "chance" } })).status === 409, "score before rolling = 409");
   let t = s.game.turnKey;
   check((await call(`/api/rooms/${code}/roll`, { token: A.token, body: { turn: t, held: [false, false, false, false, false] } })).status === 200, "roll 1");
@@ -106,7 +107,7 @@ async function main() {
   s = await state(code, B);
   check(s.game.dice[0] === d1[0] && s.game.dice[1] === d1[1] && s.game.rolls === 2, "roll 2 keeps held dice, seen by others");
   await call(`/api/rooms/${code}/roll`, { token: A.token, body: { turn: t, held: [true, true, false, false, false] } });
-  check((await call(`/api/rooms/${code}/roll`, { token: A.token, body: { turn: t, held: [] } })).status === 409, "4th roll = 409");
+  check((await call(`/api/rooms/${code}/roll`, { token: A.token, body: { turn: t, held: [false, false, false, false, false] } })).status === 409, "4th roll = 409");
   check((await call(`/api/rooms/${code}/score`, { token: A.token, body: { turn: t, category: "chance" } })).status === 200, "score Șansă");
   s = await state(code, A);
   check(s.game.turn === 1 && s.game.seats[0].sheet.chance === s.game.last.points &&s.game.rolls === 0, "turn passes to Bob");
