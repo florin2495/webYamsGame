@@ -111,6 +111,12 @@ export function deviceId(): string {
   return id;
 }
 
+/** Base path the app is served under ("/yams"); fetch/share URLs are not prefixed by Next. */
+export const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
+/** Prefix an absolute app path ("/api/...") with the base path. */
+export const withBase = (path: string) => (path.startsWith("/") ? `${BASE_PATH}${path}` : path);
+
 export class ApiRequestError extends Error {
   constructor(
     public status: number,
@@ -129,7 +135,7 @@ export async function api<T = { ok: true }>(
   if (opts.body !== undefined) headers["content-type"] = "application/json";
   let res: Response;
   try {
-    res = await fetch(path, {
+    res = await fetch(withBase(path), {
       method: opts.method ?? (opts.body !== undefined ? "POST" : "GET"),
       headers,
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,

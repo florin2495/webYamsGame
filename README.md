@@ -2,7 +2,7 @@
 
 Clasicul **Yams** cu 5 zaruri, între prieteni, pe telefon: până la **16 jucători** pe cameră (plus spectatori).
 Pe stilul celorlalte jocuri din [haiLaTăt.icu](https://hailatat.icu): Next.js 16 (App Router), Supabase (Postgres +
-Realtime Broadcast), deploy pe Vercel (fra1). Adresă: **https://yams.hailatat.icu**
+Realtime Broadcast), deploy pe Vercel (fra1). Adresă: **https://games.hailatat.icu/yams**
 
 ## Reguli
 

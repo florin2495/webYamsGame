@@ -6,7 +6,7 @@
 - GitHub: personal account **florin2495** only (repo `florin2495/webYamsGame`, private). Never the work account.
   Local git identity is pinned in `.git/config` (Florin Radu / marchidan.florin24@gmail.com).
 - The user connects the repo to Vercel by hand. Once connected, every push to `main` deploys to production:
-  https://yams.hailatat.icu (domain added in the Vercel project).
+  https://games.hailatat.icu/yams (the hub proxies `/yams/*` to this project; `basePath: "/yams"` in `next.config.ts`).
 - `vercel.json` pins `"framework": "nextjs"` (the Vercel project was imported while the repo held only a README, so it was detected as "Other" and the build failed looking for `public/`) and `"regions": ["fra1"]`. Functions run in `fra1` (Frankfurt), next to the Supabase DB. Never remove it:
   the Vercel default `iad1` (Washington) makes every DB query cross the Atlantic. After a deploy check that the
   `X-Vercel-Id` response header of an API route reads `fra1::fra1::…`.
@@ -61,7 +61,7 @@ Rules for schema changes:
 ## Testing
 - `npm test` (Vitest, `src/lib/game.test.ts` incl. full games with 2/5/16 players, `kick.test.ts`, `reconnect.test.ts`), `npx tsc --noEmit`,
   `npx eslint src`, `npx next build`.
-- End-to-end: `node scripts/e2e.mjs [baseUrl]` (default `http://localhost:3011`) drives the real API with 3 players
+- End-to-end: `node scripts/e2e.mjs [baseUrl]` (default `http://localhost:3011/yams`) drives the real API with 3 players
   and a spectator: create (with password), join, wrong password, settings, ready, start, roll/hold/score, out-of-turn
   errors, timeout (with 20 s timer), kick with "Ignoră", pending kick enforced, leave mid-game, full game to the end,
   new round (spectator seated), feedback. It deletes its rooms at the end. Dev server: `npm run dev -- -p 3011`

@@ -1,8 +1,8 @@
-// End-to-end test of the Yams API with real players. Usage: node scripts/e2e.mjs [baseUrl]
+// End-to-end test of the Yams API with real players. Usage: node scripts/e2e.mjs [baseUrl incl. /yams]
 // Needs the yams_ tables in the DB. Deletes every room it creates (leave, then a DB delete as a safety net).
 import { readFileSync } from "node:fs";
 
-const BASE = process.argv[2] ?? "http://localhost:3011";
+const BASE = process.argv[2] ?? "http://localhost:3011/yams";
 const created = new Set();
 let failures = 0;
 

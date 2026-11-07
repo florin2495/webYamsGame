@@ -16,6 +16,9 @@ export const metadata: Metadata = {
   title: "Yams",
   applicationName: "Yams",
   appleWebApp: { capable: true, title: "Yams", statusBarStyle: "default" },
+  // Metadata icon URLs are not prefixed with basePath; keep "/yams" in sync with next.config.ts.
+  // Setting icons replaces the file-based favicon link too, so list it here.
+  icons: { icon: [{ url: "/yams/favicon.ico", sizes: "48x48", type: "image/x-icon" }], apple: [{ url: "/yams/pwa-icons/apple", sizes: "180x180", type: "image/png" }] },
   other: { "apple-mobile-web-app-capable": "yes" },
   description: "Yams cu zaruri între prieteni, pe telefon. Până la 16 jucători.",
 };
