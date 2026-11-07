@@ -24,7 +24,7 @@ so this list is the source of truth. **Update it whenever the user confirms a mi
 
 | Migration | Applied to the live DB | Notes |
 | --- | --- | --- |
-| `supabase/schema.sql` (initial) | no | `yams_rooms` (game state in jsonb `game`), `yams_players` (`role`, `ready`, `kick_requested_at`) |
+| `supabase/schema.sql` (initial) | yes (2026-11-07, verified: columns selectable, anon gets 401) | `yams_rooms` (game state in jsonb `game`), `yams_players` (`role`, `ready`, `kick_requested_at`) |
 
 Rules for schema changes:
 - New migration = new numbered file in `supabase/migrations/` (`002_…sql`, …), additive when possible, and the same
