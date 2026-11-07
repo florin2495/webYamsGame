@@ -1,8 +1,13 @@
-// End-to-end test of the Yams API with real players. Usage: node scripts/e2e.mjs [baseUrl incl. /yams]
-// Needs the yams_ tables in the DB. Deletes every room it creates (leave, then a DB delete as a safety net).
+// End-to-end test of the Yams API with real players.
+// Usage: node scripts/e2e.mjs [baseUrl incl. /yams] [vercelProjectUrl incl. /yams]
+// Default: production (https://games.hailatat.icu/yams). Local: node scripts/e2e.mjs http://localhost:3011/yams
+// Rooms are named "e2e-test-..."; every room it creates is deleted at the end (leave as everyone, then a DB
+// delete of leftovers as a safety net, service key from .env.local). Sends nothing to /api/feedback.
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-const BASE = process.argv[2] ?? "http://localhost:3011/yams";
+const BASE = (process.argv[2] ?? "https://games.hailatat.icu/yams").replace(/\/$/, "");
+const VERCEL = process.argv[3] ?? (BASE.startsWith("https://games.hailatat.icu/") ? "https://011web-yams-game.vercel.app/yams" : null);
 const created = new Set();
 let failures = 0;
 
@@ -64,24 +69,91 @@ async function rules() {
   return { CATEGORIES, scoreFor };
 }
 
+const assetsOf = (html, basePath) => [...new Set([...html.matchAll(new RegExp(`${basePath}/_next/static/[^"'\\s]+`, "g"))].map((m) => m[0]))].sort();
+
+/** Pages, assets, manifest and icons over plain HTTP, and the Vercel project URL serving the same build. */
+async function httpChecks() {
+  console.log("HTTP");
+  const origin = new URL(BASE).origin;
+  const basePath = new URL(BASE).pathname;
+  const page = await fetch(BASE, { cache: "no-store" });
+  const html = await page.text();
+  check(page.status === 200 && html.includes("<html"), `page ${basePath} = ${page.status}`);
+  const assets = assetsOf(html, basePath);
+  const statuses = await Promise.all(assets.map(async (a) => (await fetch(origin + a)).status));
+  check(assets.length > 0 && statuses.every((x) => x === 200), `${assets.length} /_next assets = 200`);
+  const manifest = await fetch(`${BASE}/manifest.webmanifest`);
+  const m = await manifest.json().catch(() => ({}));
+  check(manifest.status === 200 && m.start_url === `${basePath}/`, `manifest = ${manifest.status}, start_url ${m.start_url}`);
+  const icons = [...(m.icons ?? []).map((i) => i.src), `${basePath}/favicon.ico`, `${basePath}/pwa-icons/apple`];
+  const iconRes = await Promise.all(icons.map((src) => fetch(origin + src)));
+  check(iconRes.every((x) => x.status === 200 && /image/.test(x.headers.get("content-type") ?? "")), `${icons.length} icons = 200 image/*`);
+  check(html.includes(`${basePath}/manifest.webmanifest`) && html.includes(`${basePath}/pwa-icons/apple`), "page links manifest and apple icon under the base path");
+  const roomPage = await fetch(`${BASE}/room/XXXXXX`);
+  check(roomPage.status === 200, `GET ${basePath}/room/XXXXXX = ${roomPage.status}`);
+  if (VERCEL) {
+    const v = await fetch(VERCEL, { cache: "no-store" });
+    const vAssets = assetsOf(await v.text(), basePath);
+    check(v.status === 200 && vAssets.join() === assets.join(), `${VERCEL} = ${v.status}, same build`);
+  }
+}
+
 async function main() {
   console.log(`E2E against ${BASE}`);
+  await httpChecks();
 
   console.log("Room, join, settings");
-  const r = await call("/api/rooms", { body: { name: "E2E Yams", nickname: "Ana", password: "pw", turnSeconds: 20 } });
+  const roomName = `e2e-test-${Date.now().toString(36)}`;
+  const devA = randomUUID();
+  const r = await call("/api/rooms", { body: { name: roomName, nickname: "Ana", password: "pw", turnSeconds: 20, deviceId: devA } });
   check(r.status === 200, `create room (${r.status}) region=${r.region ?? "local"}`);
   const code = r.data.code;
   created.add(code);
-  const A = { ...r.data, name: "Ana" };
+  const A = { ...r.data, name: "Ana", deviceId: devA };
+  check(typeof code === "string" && /^[A-Z2-9]{6}$/.test(code) && typeof A.token === "string", `room code ${code}`);
   check((await call(`/api/rooms/${code}/join`, { body: { nickname: "Bob", password: "nope" } })).status === 403, "wrong password = 403");
-  const join = async (nickname) => ({ ...(await call(`/api/rooms/${code}/join`, { body: { nickname, password: "pw" } })).data, name: nickname });
+  check((await call(`/api/rooms/${code}/join`, { body: { nickname: "Bob" } })).status === 403, "missing password = 403");
+  const join = async (nickname) => {
+    const deviceId = randomUUID();
+    return { ...(await call(`/api/rooms/${code}/join`, { body: { nickname, password: "pw", deviceId } })).data, name: nickname, deviceId };
+  };
   const B = await join("Bob");
   const C = await join("Cris");
   const E = await join("Ema");
   check(B.role === "player" && C.role === "player" && E.role === "player", "3 players joined in the lobby");
   check((await call(`/api/rooms/${code}/join`, { body: { nickname: "bob", password: "pw" } })).status === 409, "duplicate nickname = 409");
   const list = await call("/api/rooms");
-  check(list.data.rooms?.some((x) => x.code === code && x.hasPassword && x.players === 4), "room in public list, with password and 4 players");
+  const listed = list.data.rooms?.find((x) => x.code === code);
+  check(listed?.name === roomName && listed.hasPassword && listed.players === 4 && listed.status === "lobby", "room in public list, with password and 4 players");
+  check(!JSON.stringify(list.data).includes("scrypt"), "room list leaks no password hash");
+
+  console.log("Tokens and rejoin (lobby)");
+  check((await call(`/api/rooms/${code}/state`)).status === 401, "state without token = 401");
+  check((await call(`/api/rooms/${code}/state`, { token: "forged-token" })).status === 401, "state with a forged token = 401");
+  check((await call(`/api/rooms/${code}/settings`, { token: "forged-token", body: { turnSeconds: 20 } })).status === 401, "settings with a forged token = 401");
+  const reload = await call(`/api/rooms/${code}/state`, { token: B.token });
+  check(reload.status === 200 && reload.data.me.id === B.playerId && reload.data.me.nickname === "Bob", "reload with the saved token = same player");
+  const raw = JSON.stringify(reload.data);
+  check(!/token|device_hash|scrypt/.test(raw) && !raw.includes(A.token), "state leaks no tokens, hashes or device ids");
+  const otherDevice = await call(`/api/rooms/${code}/join`, { body: { nickname: "Bob", password: "pw", deviceId: randomUUID() } });
+  check(otherDevice.status === 409, "rejoin as a connected player from another device = 409");
+  const reB = await call(`/api/rooms/${code}/join`, { body: { nickname: "bob", password: "pw", deviceId: B.deviceId } });
+  check(reB.status === 200 && reB.data.playerId === B.playerId && reB.data.role === "player", "rejoin from the same device reclaims the seat");
+  check((await call(`/api/rooms/${code}/state`, { token: B.token })).status === 401, "old token is dead after the rejoin");
+  if (reB.data.token) B.token = reB.data.token;
+  check((await call(`/api/rooms/${code}/join`, { body: { nickname: "Bob", password: "nope", deviceId: B.deviceId } })).status === 403, "rejoin with a wrong password = 403");
+
+  console.log("Kick and leave in the lobby");
+  const F = await join("Fil");
+  check(F.role === "player", "Fil joined");
+  check((await call(`/api/rooms/${code}/kick`, { token: B.token, body: { playerId: F.playerId } })).status === 403, "non-host kick = 403");
+  check((await call(`/api/rooms/${code}/kick`, { token: A.token, body: { playerId: A.playerId } })).status === 400, "host kicking self = 400");
+  const kickF = await call(`/api/rooms/${code}/kick`, { token: A.token, body: { playerId: F.playerId } });
+  check(kickF.status === 200 && !kickF.data.pending, "lobby kick is immediate");
+  check((await call(`/api/rooms/${code}/state`, { token: F.token })).status === 401, "kicked player loses access");
+  const G = await join("Gia");
+  check((await call(`/api/rooms/${code}/leave`, { token: G.token, body: {} })).status === 200, "Gia leaves the lobby");
+  check((await state(code, A)).players.length === 4, "4 members left in the lobby");
   check((await call(`/api/rooms/${code}/settings`, { token: B.token, body: { turnSeconds: 30 } })).status === 403, "non-host settings = 403");
   check((await call(`/api/rooms/${code}/settings`, { token: A.token, body: { turnSeconds: 33 } })).status === 400, "33 s turn = 400");
   check((await call(`/api/rooms/${code}/settings`, { token: A.token, body: { turnSeconds: 20 } })).status === 200, "host sets 20 s");
@@ -89,6 +161,7 @@ async function main() {
   console.log("Ready and start");
   check((await call(`/api/rooms/${code}/start`, { token: A.token, body: {} })).status === 409, "start with players not ready = 409");
   for (const p of [B, C, E]) await call(`/api/rooms/${code}/ready`, { token: p.token, body: { ready: true } });
+  check((await call(`/api/rooms/${code}/ready`, { token: B.token, body: { ready: "yes" } })).status === 400, "malformed ready = 400");
   let s = await state(code, A);
   check(s.players.filter((p) => p.ready).length === 3, "3 players ready");
   check((await call(`/api/rooms/${code}/start`, { token: B.token, body: {} })).status === 403, "non-host start = 403");
@@ -100,22 +173,46 @@ async function main() {
   check((await call(`/api/rooms/${code}/roll`, { token: B.token, body: { held: [] } })).status === 400, "malformed held = 400");
   check((await call(`/api/rooms/${code}/roll`, { token: B.token, body: { held: [false, false, false, false, false] } })).status === 409, "roll out of turn = 409");
   check((await call(`/api/rooms/${code}/score`, { token: A.token, body: { category: "chance" } })).status === 409, "score before rolling = 409");
+  check((await call(`/api/rooms/${code}/roll`, { token: "forged-token", body: { held: [false, false, false, false, false] } })).status === 401, "roll with a forged token = 401");
+  check((await call(`/api/rooms/${code}/start`, { token: A.token, body: {} })).status === 409, "start twice = 409");
   let t = s.game.turnKey;
   check((await call(`/api/rooms/${code}/roll`, { token: A.token, body: { turn: t, held: [false, false, false, false, false] } })).status === 200, "roll 1");
   const d1 = (await state(code, A)).game.dice;
   await call(`/api/rooms/${code}/roll`, { token: A.token, body: { turn: t, held: [true, true, false, false, false] } });
   s = await state(code, B);
   check(s.game.dice[0] === d1[0] && s.game.dice[1] === d1[1] && s.game.rolls === 2, "roll 2 keeps held dice, seen by others");
+  check((await call(`/api/rooms/${code}/roll`, { token: A.token, body: { turn: t, held: [true, true, true, true, true] } })).status === 409, "roll with every die held = 409");
   await call(`/api/rooms/${code}/roll`, { token: A.token, body: { turn: t, held: [true, true, false, false, false] } });
   check((await call(`/api/rooms/${code}/roll`, { token: A.token, body: { turn: t, held: [false, false, false, false, false] } })).status === 409, "4th roll = 409");
+  check((await call(`/api/rooms/${code}/score`, { token: A.token, body: { turn: t, category: "jackpot" } })).status === 400, "unknown box = 400");
   check((await call(`/api/rooms/${code}/score`, { token: A.token, body: { turn: t, category: "chance" } })).status === 200, "score Șansă");
   s = await state(code, A);
   check(s.game.turn === 1 && s.game.seats[0].sheet.chance === s.game.last.points &&s.game.rolls === 0, "turn passes to Bob");
   check((await call(`/api/rooms/${code}/score`, { token: A.token, body: { turn: t, category: "ones" } })).status === 409, "stale turnKey = 409");
+  t = s.game.turnKey;
+  await call(`/api/rooms/${code}/roll`, { token: B.token, body: { turn: t, held: [false, false, false, false, false] } });
+  check((await call(`/api/rooms/${code}/score`, { token: A.token, body: { turn: t, category: "ones" } })).status === 409, "Ana scoring on Bob's turn = 409");
+  const views = await Promise.all([A, B, C, E].map((p) => state(code, p)));
+  const strip = (g) => JSON.stringify({ ...g, mySeat: null });
+  check(views.every((v) => strip(v.game) === strip(views[0].game)), "every player sees the same game");
+  check(views.map((v) => v.game.mySeat).join() === "0,1,2,3", "each player gets their own seat");
+
+  console.log("Rejoin mid-game");
+  const sheetBefore = JSON.stringify(views[0].game.seats[0].sheet);
+  const reA = await call(`/api/rooms/${code}/join`, { body: { nickname: "Ana", password: "pw", deviceId: A.deviceId } });
+  check(reA.status === 200 && reA.data.playerId === A.playerId && reA.data.role === "player", "host rejoins mid-game as a player");
+  check((await call(`/api/rooms/${code}/state`, { token: A.token })).status === 401, "old token is dead");
+  if (reA.data.token) A.token = reA.data.token;
+  s = await state(code, A);
+  check(s.game.mySeat === 0 && JSON.stringify(s.game.seats[0].sheet) === sheetBefore && s.room.hostPlayerId === A.playerId, "same seat, same sheet, still host");
 
   console.log("Spectator");
   const D = { ...(await call(`/api/rooms/${code}/join`, { body: { nickname: "Dan", password: "pw" } })).data, name: "Dan" };
   check(D.role === "observer", "joining mid-game = spectator");
+  const ds = await state(code, D);
+  check(ds.game.mySeat === null && strip(ds.game) === strip((await state(code, A)).game), "spectator has no seat and sees the same game");
+  check((await call(`/api/rooms/${code}/score`, { token: D.token, body: { category: "chance" } })).status === 403, "spectator score = 403");
+  check((await call(`/api/rooms/${code}/kick`, { token: D.token, body: { playerId: B.playerId } })).status === 403, "spectator kick = 403");
   check((await call(`/api/rooms/${code}/roll`, { token: D.token, body: { held: [] } })).status === 403, "spectator roll = 403");
   check((await call(`/api/rooms/${code}/timeout`, { token: D.token, body: { turn: s.game.turnKey } })).status === 409, "early timeout = 409");
 
@@ -159,16 +256,22 @@ async function main() {
   check(s.room.status === "finished" && s.game.phase === "over", `game over after ${guard} more turns`);
   check(s.game.seats.filter((x) => !x.left).every((x) => Object.keys(x.sheet).length === 13), "every remaining sheet is full");
   check(s.game.standings[0].place === 1 && s.game.standings.at(-1).place === null, "standings ranked, leavers last");
+  const { CATEGORIES: cats } = await rules();
+  const sums = s.game.seats.every((seat) => {
+    const up = cats.slice(0, 6).reduce((a, k) => a + (seat.sheet[k] ?? 0), 0);
+    const low = cats.slice(6).reduce((a, k) => a + (seat.sheet[k] ?? 0), 0);
+    return seat.totals.total === up + (up >= 63 ? 35 : 0) + low + seat.yamsBonuses * 100;
+  });
+  check(sums, "totals = boxes + upper bonus + Yams bonuses");
+  const ranked = s.game.standings.filter((x) => !x.left);
+  check(ranked.every((x, i) => i === 0 || ranked[i - 1].total >= x.total), "winner has the highest total");
+  check((await call(`/api/rooms/${code}/roll`, { token: A.token, body: { held: [false, false, false, false, false] } })).status === 409, "roll after the game = 409");
 
   console.log("New round");
   check((await call(`/api/rooms/${code}/new-round`, { token: D.token, body: {} })).status === 403, "non-host new round = 403");
   check((await call(`/api/rooms/${code}/new-round`, { token: A.token, body: {} })).status === 200, "host new round");
   s = await state(code, D);
   check(s.room.status === "lobby" && s.room.round === 2 && s.me.role === "player" && s.players.every((p) => !p.ready), "spectator seated, ready reset");
-
-  console.log("Feedback (no rows written)");
-  check((await call("/api/feedback", { body: { message: "", nickname: "e2e" } })).status === 400, "empty feedback = 400");
-  check((await call("/api/feedback", { body: { message: "e2e", website: "bot" } })).status === 200, "honeypot accepted, not stored");
 
   console.log("Cleanup");
   for (const p of [B, D]) await call(`/api/rooms/${code}/leave`, { token: p.token, body: {} });

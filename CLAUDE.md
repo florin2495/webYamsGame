@@ -61,8 +61,12 @@ Rules for schema changes:
 ## Testing
 - `npm test` (Vitest, `src/lib/game.test.ts` incl. full games with 2/5/16 players, `kick.test.ts`, `reconnect.test.ts`), `npx tsc --noEmit`,
   `npx eslint src`, `npx next build`.
-- End-to-end: `node scripts/e2e.mjs [baseUrl]` (default `http://localhost:3011/yams`) drives the real API with 3 players
-  and a spectator: create (with password), join, wrong password, settings, ready, start, roll/hold/score, out-of-turn
-  errors, timeout (with 20 s timer), kick with "Ignoră", pending kick enforced, leave mid-game, full game to the end,
-  new round (spectator seated), feedback. It deletes its rooms at the end. Dev server: `npm run dev -- -p 3011`
-  (`.claude/launch.json` → `yams-dev`).
+- End-to-end: `node scripts/e2e.mjs [baseUrl] [vercelUrl]` (default production `https://games.hailatat.icu/yams`;
+  local: `http://localhost:3011/yams`) first checks page / `_next` assets / manifest / icons / `room/XXXXXX` over HTTP
+  and that `011web-yams-game.vercel.app/yams` serves the same build, then drives the real API with 3 players and a
+  spectator: create (with password), join, wrong/missing password, forged/missing token, rejoin with the saved token and
+  by nickname (same device = reclaim, other device = 409, old token dead, also mid-game), lobby kick/leave, settings,
+  ready, start, roll/hold/score, illegal moves, out-of-turn errors, same view for everyone, timeout (20 s timer), kick
+  with "Ignoră", pending kick enforced, leave mid-game, full game to the end (totals and winner checked), new round
+  (spectator seated). Rooms are named `e2e-test-…` and deleted at the end; it never calls `/api/feedback`.
+  Dev server: `npm run dev -- -p 3011` (`.claude/launch.json` → `yams-dev`).
