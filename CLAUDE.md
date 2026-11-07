@@ -25,6 +25,7 @@ so this list is the source of truth. **Update it whenever the user confirms a mi
 | Migration | Applied to the live DB | Notes |
 | --- | --- | --- |
 | `supabase/schema.sql` (initial) | yes (2026-11-07, verified: columns selectable, anon gets 401) | `yams_rooms` (game state in jsonb `game`), `yams_players` (`role`, `ready`, `kick_requested_at`) |
+| `supabase/migrations/002_reconnect.sql` | yes (2026-11-07, verified: service role 200, anon 401) | `yams_players.last_seen_at`, `device_hash` + index (rejoin the same seat). Do not push before it is applied |
 
 Rules for schema changes:
 - New migration = new numbered file in `supabase/migrations/` (`002_…sql`, …), additive when possible, and the same
@@ -47,14 +48,18 @@ Rules for schema changes:
   "Sunt ready", then the host starts.
 - No cron: the turn timeout (`/timeout`) is triggered lazily by clients (host and current player first, other players
   +3 s, spectators +6 s); the server checks the deadline and `turnKey`, so duplicates are no-ops.
-- Idle rooms: lobby/finished closed after `ROOM_IDLE_MINUTES` (2) with nobody on the page, a running game after 60 min.
+- Idle rooms: lobby/finished closed after `ROOM_IDLE_MINUTES` (10) with nobody on the page, a running game after 60 min.
   Lazy cleanup on room list / create / room access.
+- Rejoin the same seat (`src/lib/reconnect.ts`): every member request stamps `last_seen_at` (≤ every 10 s);
+  re-joining with an existing nickname reclaims that seat (new token, same role, pending kick dropped) from the same
+  device (`device_hash`) or once the seat has been unseen for 45 s, also mid-game. `/state` exposes only a derived
+  `connected` flag ("deconectat" badge). Home shows "Revino în camera …" for stored sessions that are still valid.
 - Kick: in the lobby immediate; during a game a 10 s pending kick the player can "Ignoră" (`kick_requested_at`).
 - Realtime: Broadcast topic `yams:room:<uuid>` carries no data, clients re-fetch `/state`; 15 s polling fallback.
 - Per-device settings (localStorage): sound, vibration, confirm before a 0 box.
 
 ## Testing
-- `npm test` (Vitest, `src/lib/game.test.ts` incl. full games with 2/5/16 players), `npx tsc --noEmit`,
+- `npm test` (Vitest, `src/lib/game.test.ts` incl. full games with 2/5/16 players, `kick.test.ts`, `reconnect.test.ts`), `npx tsc --noEmit`,
   `npx eslint src`, `npx next build`.
 - End-to-end: `node scripts/e2e.mjs [baseUrl]` (default `http://localhost:3011`) drives the real API with 3 players
   and a spectator: create (with password), join, wrong password, settings, ready, start, roll/hold/score, out-of-turn

@@ -12,6 +12,8 @@ export interface PublicPlayer {
   ready: boolean;
   /** Ms left of a pending kick (host kicked this player during a game), null when none. */
   kickRemainingMs: number | null;
+  /** Seen in the last 45 s (see lib/reconnect.ts). False = phone in the background, closed tab, no network. */
+  connected: boolean;
 }
 
 export interface PublicSeat {

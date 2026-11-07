@@ -57,6 +57,9 @@ export interface PlayerRow {
   joined_at: string;
   /** Set when the host kicked this player during a game; removed KICK_GRACE_MS later unless ignored. */
   kick_requested_at: string | null;
+  /** Presence stamp, touched by requireMember. Needs migration 002_reconnect.sql. */
+  last_seen_at: string;
 }
 
-export const PLAYER_COLUMNS = "id, room_id, nickname, is_host, role, ready, joined_at, kick_requested_at";
+/** Never add token_hash / device_hash here: these rows feed the public state. */
+export const PLAYER_COLUMNS = "id, room_id, nickname, is_host, role, ready, joined_at, kick_requested_at, last_seen_at";

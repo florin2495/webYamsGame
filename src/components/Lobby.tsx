@@ -5,7 +5,7 @@ import { api } from "@/lib/client/api";
 import { MAX_PLAYERS, MIN_PLAYERS, minutesLabel, ROOM_IDLE_MINUTES } from "@/lib/game";
 import type { PublicPlayer, RoomState } from "@/lib/types";
 import { TurnSelect } from "./TurnSelect";
-import { Button, Card, ErrorText } from "./ui";
+import { Button, Card, ErrorText, OfflineBadge } from "./ui";
 
 export function Lobby({ state, token, refresh }: { state: RoomState; token: string; refresh: () => Promise<void> }) {
   const { room, me, players } = state;
@@ -141,6 +141,7 @@ function Members({
                 {p.id === me.id && <span className="text-zinc-500"> (tu)</span>}
               </span>
               {p.isHost && <span className="rounded bg-zinc-200 px-1.5 text-[10px] font-semibold uppercase dark:bg-zinc-800">host</span>}
+              <OfflineBadge connected={p.connected} />
               {p.role === "player" && !p.isHost && (
                 <span
                   className={`rounded px-1.5 text-[10px] font-semibold uppercase ${

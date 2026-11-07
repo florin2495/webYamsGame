@@ -211,8 +211,8 @@ describe("settings and rooms", () => {
   });
   it("expires idle rooms", () => {
     const t = new Date(0);
-    expect(isRoomExpired("lobby", t, 2 * 60_000 + 1)).toBe(true);
-    expect(isRoomExpired("lobby", t, 60_000)).toBe(false);
+    expect(isRoomExpired("lobby", t, 10 * 60_000 + 1)).toBe(true);
+    expect(isRoomExpired("lobby", t, 9 * 60_000)).toBe(false);
     expect(isRoomExpired("playing", t, 30 * 60_000)).toBe(false);
   });
 });

@@ -21,7 +21,7 @@ import {
 } from "@/lib/game";
 import type { PublicGame, PublicSeat, RoomState } from "@/lib/types";
 import { Die, MiniDice } from "./Dice";
-import { Button, Card, ErrorText } from "./ui";
+import { Button, Card, ErrorText, OfflineBadge } from "./ui";
 
 /** Extra wait before other devices trigger a timeout, so the host's / current player's device goes first. */
 const FALLBACK_SEATED_MS = 3_000;
@@ -115,6 +115,7 @@ export function Game({ state, token, refresh }: { state: RoomState; token: strin
   };
 
   const turnSeat = g.seats[g.turn];
+  const connected = (playerId: string) => state.players.find((p) => p.id === playerId)?.connected;
   const secondsLeft = g.turnDeadline !== null && now > 0 ? Math.max(0, Math.ceil((g.turnDeadline - now) / 1000)) : null;
   const pct = secondsLeft !== null ? Math.min(100, (secondsLeft / g.turnSeconds) * 100) : 0;
   const allHeld = held.every(Boolean);
@@ -124,7 +125,10 @@ export function Game({ state, token, refresh }: { state: RoomState; token: strin
       {playing ? (
         <Card className={myTurn ? "ring-2 ring-indigo-500" : ""}>
           <div className="flex items-baseline justify-between gap-2">
-            <h2 className="truncate text-lg font-black">{myTurn ? "🎯 E rândul tău!" : `Rândul lui ${turnSeat.name}`}</h2>
+            <h2 className="flex min-w-0 items-center gap-2 text-lg font-black">
+              <span className="truncate">{myTurn ? "🎯 E rândul tău!" : `Rândul lui ${turnSeat.name}`}</span>
+              {!myTurn && !turnSeat.left && <OfflineBadge connected={connected(turnSeat.playerId)} />}
+            </h2>
             <span className="shrink-0 text-sm text-zinc-500">tura {g.round}/13</span>
           </div>
           <div className="mt-2 flex items-center gap-2">
@@ -207,7 +211,7 @@ export function Game({ state, token, refresh }: { state: RoomState; token: strin
         )}
       </Card>
 
-      {playing && <Standings g={g} />}
+      {playing && <Standings g={g} connected={connected} />}
       {g.mySeat === null && playing && <p className="text-center text-sm text-zinc-500">Ești spectator: joci de la următoarea partidă.</p>}
     </>
   );
@@ -288,7 +292,7 @@ function ScoreSheet({
   );
 }
 
-function Standings({ g }: { g: PublicGame }) {
+function Standings({ g, connected }: { g: PublicGame; connected: (playerId: string) => boolean | undefined }) {
   return (
     <Card>
       <h2 className="mb-2 font-bold">Clasament</h2>
@@ -301,6 +305,12 @@ function Standings({ g }: { g: PublicGame }) {
               {g.mySeat === r.seat && <span className="text-zinc-500"> (tu)</span>}
               {r.left && <span className="text-xs text-zinc-500"> · a plecat</span>}
               {g.seats[r.seat].timeouts >= 2 && !r.left && <span className="text-xs text-amber-600"> · ⏱×{g.seats[r.seat].timeouts}</span>}
+              {!r.left && (
+                <>
+                  {" "}
+                  <OfflineBadge connected={connected(g.seats[r.seat].playerId)} />
+                </>
+              )}
             </span>
             <span className="font-mono font-bold">{r.total}</span>
           </li>

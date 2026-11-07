@@ -6,7 +6,7 @@ export const MAX_PLAYERS = 16;
 export const MAX_OBSERVERS = 16;
 export const NICKNAME_MAX = 12;
 /** Lobby/finished rooms nobody has open are closed after this long. */
-export const ROOM_IDLE_MINUTES = 2;
+export const ROOM_IDLE_MINUTES = 10;
 /** A running game nobody has open is closed after this long. */
 export const PLAYING_IDLE_MINUTES = 60;
 /** /state refreshes last_activity_at at most this often, to keep DB writes low. */

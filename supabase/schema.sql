@@ -45,10 +45,16 @@ create table if not exists public.yams_players (
   role              text not null default 'player' constraint yams_players_role_check check (role in ('player', 'observer')),
   ready             boolean not null default false,
   joined_at         timestamptz not null default now(),
-  kick_requested_at timestamptz                              -- pending kick during a game (10 s to press "Ignoră")
+  kick_requested_at timestamptz,                             -- pending kick during a game (10 s to press "Ignoră")
+  last_seen_at      timestamptz not null default now(),      -- presence: disconnected after 45 s, see migrations/002
+  device_hash       text                                     -- sha256 of the browser's device id, see migrations/002
 );
+-- Existing databases: the lines above only apply to a fresh table (migrations/002_reconnect.sql).
+alter table public.yams_players add column if not exists last_seen_at timestamptz not null default now();
+alter table public.yams_players add column if not exists device_hash text;
 create unique index if not exists yams_players_room_nickname_uq on public.yams_players (room_id, lower(nickname));
 create index if not exists yams_players_room_idx on public.yams_players (room_id);
+create index if not exists yams_players_room_seen_idx on public.yams_players (room_id, last_seen_at);
 
 do $$ begin
   alter table public.yams_rooms
