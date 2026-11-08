@@ -25,8 +25,8 @@ so this list is the source of truth. **Update it whenever the user confirms a mi
 | Migration | Applied to the live DB | Notes |
 | --- | --- | --- |
 | `supabase/schema.sql` (initial) | yes (2026-11-07, verified: columns selectable, anon gets 401) | `yams_rooms` (game state in jsonb `game`), `yams_players` (`role`, `ready`, `kick_requested_at`) |
-| `supabase/migrations/002_reconnect.sql` | yes (2026-11-07, verified: service role 200, anon 401) | `yams_players.last_seen_at`, `device_hash` + index (rejoin the same seat). Do not push before it is applied |
-| `supabase/migrations/003_seat_queue.sql` | **NO - user must run it** | `yams_players.seat` (host-chosen order, contract A) + `queued_at` (spectator queue, contract B). `/reorder`, `/queue`, start and new-round need it. Do not push before it is applied |
+| `supabase/migrations/002_reconnect.sql` | yes (2026-11-07, verified: service role 200, anon 401) | `yams_players.last_seen_at`, `device_hash` + index (rejoin the same seat). |
+| `supabase/migrations/003_seat_queue.sql` | yes (2026-11-08, verified: seat/queued_at selectable with service role) | `yams_players.seat` (host-chosen order, contract A) + `queued_at` (spectator queue, contract B). `/reorder`, `/queue`, start and new-round need it. |
 
 Rules for schema changes:
 - New migration = new numbered file in `supabase/migrations/` (`002_…sql`, …), additive when possible, and the same
