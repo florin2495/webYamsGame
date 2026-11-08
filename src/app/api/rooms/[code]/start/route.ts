@@ -1,10 +1,10 @@
-import { MAX_PLAYERS, MIN_PLAYERS, newGame, seatOrder } from "@/lib/game";
+import { MAX_PLAYERS, MIN_PLAYERS, newGame } from "@/lib/game";
 import { notifyRoom } from "@/lib/server/broadcast";
 import { clearKicks } from "@/lib/server/membership";
 import { fail, handle } from "@/lib/server/http";
 import { listPlayers, requireHost, requireMember, requireStatus, saveRoom, withDefaults } from "@/lib/server/room";
 
-// POST /api/rooms/[code]/start - host only, 2-16 players, everyone else ready. Turn order: host first, then join order.
+// POST /api/rooms/[code]/start - host only, 2-16 players, everyone else ready. Turn order: the order saved in the lobby (host can reorder).
 export async function POST(req: Request, ctx: RouteContext<"/api/rooms/[code]/start">) {
   return handle(async () => {
     const { code } = await ctx.params;
@@ -19,10 +19,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/rooms/[code]/st
     const notReady = players.filter((p) => !p.ready && p.id !== room.host_player_id);
     if (notReady.length > 0) fail(409, `Nu sunt toți ready: ${notReady.map((p) => p.nickname).join(", ")}.`);
 
-    const seats = seatOrder(
-      players.map((p) => p.id),
-      room.host_player_id,
-    );
+    const seats = players.map((p) => p.id); // listPlayers already sorts by seat, then join time
     const names = seats.map((id) => players.find((p) => p.id === id)!.nickname);
     const game = newGame(seats, names, withDefaults(room.settings), Date.now());
     await saveRoom(room, { status: "playing", game });

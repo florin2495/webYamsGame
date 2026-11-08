@@ -1,8 +1,9 @@
 import "server-only";
 import { isKickExpired, KICK_GRACE_MS, KICK_NETWORK_GRACE_MS } from "@/lib/kick";
-import { removeSeat } from "@/lib/game";
+import { type GameState, removeSeat } from "@/lib/game";
 import { notifyRoom } from "./broadcast";
 import { db, type RoomRow, T } from "./db";
+import { reportRound } from "./leaderboard";
 import { getRoomByCode, listPlayers, saveRoom, withRetry } from "./room";
 
 /**
@@ -24,7 +25,7 @@ export async function removePlayer(room: RoomRow, playerId: string, reason: stri
       if (remaining.length === 0) {
         const { error } = await db().from(T.rooms).delete().eq("id", fresh.id);
         if (error) throw error;
-        return { roomClosed: true, newHostId: null as string | null, changedHost: false };
+        return { roomClosed: true, newHostId: null as string | null, changedHost: false, finishedGame: undefined as GameState | null | undefined, round: 0 };
       }
 
       const nextHost = remaining.find((p) => p.role === "player") ?? remaining[0];
@@ -36,9 +37,10 @@ export async function removePlayer(room: RoomRow, playerId: string, reason: stri
         update.game = game;
         if (game.phase === "over") update.status = "finished";
       }
+      const finishedGame = update.status === "finished" ? update.game : undefined;
       // Update the room first so the host never points at a deleted player.
       await saveRoom(fresh, update);
-      return { roomClosed: false, newHostId, changedHost: newHostId !== fresh.host_player_id };
+      return { roomClosed: false, newHostId, changedHost: newHostId !== fresh.host_player_id, finishedGame, round: fresh.round };
     },
   );
   if (result.roomClosed) return { roomClosed: true };
@@ -50,6 +52,7 @@ export async function removePlayer(room: RoomRow, playerId: string, reason: stri
   const { error: deleteError } = await db().from(T.players).delete().eq("id", playerId);
   if (deleteError) throw deleteError;
 
+  if (result.finishedGame) await reportRound(room.code, result.round, result.finishedGame);
   await notifyRoom(room.id, reason);
   return { roomClosed: false };
 }

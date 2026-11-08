@@ -21,7 +21,7 @@ export function Rules() {
           Fiecare tură are între {TURN_OPTIONS[0]} și {TURN_OPTIONS[TURN_OPTIONS.length - 1]} de secunde (alege host-ul). Dacă timpul
           expiră, se aruncă o dată (dacă n-ai aruncat) și se scrie automat la căsuța cu cele mai multe puncte.
         </li>
-        <li>Cine intră în timpul unei partide o urmărește ca spectator și joacă de la următoarea.</li>
+        <li>Cine intră în timpul unei partide e spectator; apasă „Intră la runda următoare” ca să joci la runda următoare. Host-ul poate schimba ordinea jucătorilor în lobby.</li>
         <li>Câștigă cine are cel mai mare total după 13 ture.</li>
       </ol>
     </details>

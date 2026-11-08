@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api } from "@/lib/client/api";
 import { MAX_PLAYERS, MIN_PLAYERS, minutesLabel, ROOM_IDLE_MINUTES } from "@/lib/game";
 import type { PublicPlayer, RoomState } from "@/lib/types";
+import { QueueButton } from "./QueueButton";
 import { TurnSelect } from "./TurnSelect";
 import { Button, Card, ErrorText, OfflineBadge } from "./ui";
 
@@ -35,6 +36,14 @@ export function Lobby({ state, token, refresh }: { state: RoomState; token: stri
 
   const setTurn = (turnSeconds: number) => run(() => api(`${base}/settings`, { token, body: { turnSeconds } }));
   const toggleReady = () => run(() => api(`${base}/ready`, { token, body: { ready: !me.ready } }));
+  const move = (id: string, delta: -1 | 1) => {
+    const ids = seated.map((p) => p.id);
+    const i = ids.indexOf(id);
+    const j = i + delta;
+    if (i < 0 || j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    void run(() => api(`${base}/reorder`, { token, body: { order: ids } }));
+  };
   const start = () => run(() => api(`${base}/start`, { token, body: {} }));
 
   return (
@@ -46,7 +55,7 @@ export function Lobby({ state, token, refresh }: { state: RoomState; token: stri
             {n}/{MAX_PLAYERS}
           </span>
         </div>
-        <Members list={seated} state={state} token={token} refresh={refresh} empty="Nimeni la masă încă." />
+        <Members list={seated} state={state} token={token} refresh={refresh} empty="Nimeni la masă încă." onMove={isHost ? move : undefined} moveDisabled={busy} />
         {n < MIN_PLAYERS && (
           <p className="mt-2 text-sm text-zinc-500">
             Mai trebuie {MIN_PLAYERS - n} {MIN_PLAYERS - n === 1 ? "jucător" : "jucători"}. Apasă pe cod (sus) ca să trimiți invitația.
@@ -58,7 +67,7 @@ export function Lobby({ state, token, refresh }: { state: RoomState; token: stri
         <Card>
           <h2 className="mb-2 font-bold">👀 Spectatori</h2>
           <Members list={watching} state={state} token={token} refresh={refresh} empty="" />
-          <p className="mt-2 text-xs text-zinc-500">Masa e plină. Intră la următoarea partidă dacă se eliberează un loc.</p>
+          <p className="mt-2 text-xs text-zinc-500">Spectatorii pot intra la masă dacă e loc, sau la runda următoare.</p>
         </Card>
       )}
 
@@ -88,7 +97,10 @@ export function Lobby({ state, token, refresh }: { state: RoomState; token: stri
           </p>
         </>
       ) : (
-        <p className="text-center text-sm text-zinc-500">Ești spectator. Așteptăm ca host-ul să înceapă partida…</p>
+        <>
+          <QueueButton state={state} token={token} refresh={refresh} />
+          <p className="text-center text-sm text-zinc-500">Ești spectator. Așteptăm ca host-ul să înceapă partida…</p>
+        </>
       )}
       <p className="text-center text-xs text-zinc-500">
         Camera se închide după {minutesLabel(ROOM_IDLE_MINUTES)} în care nimeni nu o are deschisă.
@@ -103,12 +115,16 @@ function Members({
   token,
   refresh,
   empty,
+  onMove,
+  moveDisabled,
 }: {
   list: PublicPlayer[];
   state: RoomState;
   token: string;
   refresh: () => Promise<void>;
   empty: string;
+  onMove?: (id: string, delta: -1 | 1) => void;
+  moveDisabled?: boolean;
 }) {
   const { me, room } = state;
   const canKick = room.hostPlayerId === me.id;
@@ -133,9 +149,10 @@ function Members({
   return (
     <>
       <ul className="flex flex-col divide-y divide-zinc-200 dark:divide-zinc-800">
-        {list.map((p) => (
+        {list.map((p, idx) => (
           <li key={p.id} className="flex items-center justify-between gap-2 py-2">
             <span className="flex min-w-0 items-center gap-2">
+              {onMove && <span className="w-5 shrink-0 text-xs text-zinc-500">{idx + 1}.</span>}
               <span className="truncate">
                 {p.nickname}
                 {p.id === me.id && <span className="text-zinc-500"> (tu)</span>}
@@ -152,6 +169,28 @@ function Members({
                 </span>
               )}
             </span>
+            {onMove && (
+              <span className="flex shrink-0 gap-1">
+                <button
+                  type="button"
+                  onClick={() => onMove(p.id, -1)}
+                  disabled={moveDisabled || idx === 0}
+                  className="min-h-8 min-w-8 rounded-md border border-zinc-300 text-sm disabled:opacity-30 dark:border-zinc-700"
+                  aria-label={`Mută ${p.nickname} mai sus`}
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onMove(p.id, 1)}
+                  disabled={moveDisabled || idx === list.length - 1}
+                  className="min-h-8 min-w-8 rounded-md border border-zinc-300 text-sm disabled:opacity-30 dark:border-zinc-700"
+                  aria-label={`Mută ${p.nickname} mai jos`}
+                >
+                  ↓
+                </button>
+              </span>
+            )}
             {canKick && p.id !== me.id && (
               <button
                 type="button"

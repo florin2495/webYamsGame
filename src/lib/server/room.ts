@@ -111,7 +111,12 @@ export async function listPlayers(roomId: string): Promise<PlayerRow[]> {
     .eq("room_id", roomId)
     .order("joined_at", { ascending: true });
   if (error) throw error;
-  return (data ?? []) as PlayerRow[];
+  return sortBySeat((data ?? []) as PlayerRow[]);
+}
+
+/** Host-chosen order first (seat), then not-yet-placed members by join time. Stable. */
+export function sortBySeat<P extends { seat: number | null }>(players: P[]): P[] {
+  return [...players].sort((a, b) => (a.seat ?? 1e9) - (b.seat ?? 1e9));
 }
 
 /**
@@ -178,6 +183,7 @@ const toPublic = (p: PlayerRow, now: number): PublicPlayer => ({
   ready: p.ready,
   kickRemainingMs: kickRemainingMs(p.kick_requested_at, now),
   connected: isConnected(p.last_seen_at, now),
+  queued: p.queued_at !== null,
 });
 
 /** Everything in Yams is public: dice and sheets are seen by all. Adds derived values for the UI. */

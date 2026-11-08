@@ -20,6 +20,7 @@ import {
   YAMS_BONUS,
 } from "@/lib/game";
 import type { PublicGame, PublicSeat, RoomState } from "@/lib/types";
+import { QueueButton } from "./QueueButton";
 import { Die, MiniDice } from "./Dice";
 import { Button, Card, ErrorText, OfflineBadge } from "./ui";
 
@@ -212,7 +213,12 @@ export function Game({ state, token, refresh }: { state: RoomState; token: strin
       </Card>
 
       {playing && <Standings g={g} connected={connected} />}
-      {g.mySeat === null && playing && <p className="text-center text-sm text-zinc-500">Ești spectator: joci de la următoarea partidă.</p>}
+      {g.mySeat === null && (
+        <>
+          {playing && <p className="text-center text-sm text-zinc-500">Ești spectator: vezi tot, dar nu poți acționa.</p>}
+          <QueueButton state={state} token={token} refresh={refresh} />
+        </>
+      )}
     </>
   );
 }

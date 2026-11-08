@@ -26,6 +26,7 @@ so this list is the source of truth. **Update it whenever the user confirms a mi
 | --- | --- | --- |
 | `supabase/schema.sql` (initial) | yes (2026-11-07, verified: columns selectable, anon gets 401) | `yams_rooms` (game state in jsonb `game`), `yams_players` (`role`, `ready`, `kick_requested_at`) |
 | `supabase/migrations/002_reconnect.sql` | yes (2026-11-07, verified: service role 200, anon 401) | `yams_players.last_seen_at`, `device_hash` + index (rejoin the same seat). Do not push before it is applied |
+| `supabase/migrations/003_seat_queue.sql` | **NO - user must run it** | `yams_players.seat` (host-chosen order, contract A) + `queued_at` (spectator queue, contract B). `/reorder`, `/queue`, start and new-round need it. Do not push before it is applied |
 
 Rules for schema changes:
 - New migration = new numbered file in `supabase/migrations/` (`002_…sql`, …), additive when possible, and the same
@@ -44,7 +45,7 @@ Rules for schema changes:
 - The whole game state is one jsonb column `yams_rooms.game`, written with an optimistic lock on `yams_rooms.version`
   (`saveRoom`, retried by `withRetry`). Everything is public (dice, holds, sheets).
 - Members: `yams_players.role` = `player` (max 16) or `observer` (spectator, max 16). Joining during or after a game =
-  spectator; "Rundă nouă" seats spectators while there are free seats. Lobby: everyone except the host presses
+  spectator; spectators press "Intră la runda următoare" (`POST /queue`, toggle; immediate in the lobby when a seat is free); "Rundă nouă" seats the queue in order while there are free seats. Lobby: everyone except the host presses
   "Sunt ready", then the host starts.
 - No cron: the turn timeout (`/timeout`) is triggered lazily by clients (host and current player first, other players
   +3 s, spectators +6 s); the server checks the deadline and `turnKey`, so duplicates are no-ops.
@@ -57,6 +58,8 @@ Rules for schema changes:
 - Kick: in the lobby immediate; during a game a 10 s pending kick the player can "Ignoră" (`kick_requested_at`).
 - Realtime: Broadcast topic `yams:room:<uuid>` carries no data, clients re-fetch `/state`; 15 s polling fallback.
 - Per-device settings (localStorage): sound, vibration, confirm before a 0 box.
+
+- Leaderboard (contract C): `src/lib/server/leaderboard.ts` `reportRound` upserts `hub_leaderboard` (game `yams`, player_key = lowercase nickname) once per (room, round) via `hub_leaderboard_rounds`; winners = place 1, players who left are not counted. Needs the hub's `002_hub_leaderboard.sql` applied (hub-owned). Never throws.
 
 ## Testing
 - `npm test` (Vitest, `src/lib/game.test.ts` incl. full games with 2/5/16 players, `kick.test.ts`, `reconnect.test.ts`), `npx tsc --noEmit`,

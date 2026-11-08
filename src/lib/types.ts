@@ -14,6 +14,8 @@ export interface PublicPlayer {
   kickRemainingMs: number | null;
   /** Seen in the last 45 s (see lib/reconnect.ts). False = phone in the background, closed tab, no network. */
   connected: boolean;
+  /** Spectator who asked to sit down at the next round. */
+  queued: boolean;
 }
 
 export interface PublicSeat {

@@ -3,6 +3,7 @@ import { type GameState, RuleError } from "@/lib/game";
 import { notifyRoom } from "./broadcast";
 import type { PlayerRow, RoomRow } from "./db";
 import { fail, handle, readJson } from "./http";
+import { reportRound } from "./leaderboard";
 import { requireMember, requireStatus, saveRoom, withRetry } from "./room";
 
 export interface MoveContext {
@@ -28,7 +29,7 @@ export function moveHandler(
 ): Promise<Response> {
   return handle(async () => {
     const body = req.headers.get("content-type")?.includes("json") ? await readJson(req) : {};
-    const roomId = await withRetry(
+    const result = await withRetry(
       () => requireMember(req, code),
       async ({ room, player }) => {
         requireStatus(room, "playing");
@@ -50,10 +51,11 @@ export function moveHandler(
           throw err;
         }
         await saveRoom(room, { game: next, ...(next.phase === "over" ? { status: "finished" as const } : {}) });
-        return room.id;
+        return { roomId: room.id, finished: next.phase === "over" ? { code: room.code, round: room.round, game: next } : null };
       },
     );
-    await notifyRoom(roomId, kind);
+    if (result.finished) await reportRound(result.finished.code, result.finished.round, result.finished.game);
+    await notifyRoom(result.roomId, kind);
     return { ok: true };
   });
 }
