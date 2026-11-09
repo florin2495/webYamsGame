@@ -6,7 +6,7 @@ import { cleanText, fail, handle, isUniqueViolation, readJson } from "@/lib/serv
 import { cleanupExpiredRooms, parseSettings, withDefaults } from "@/lib/server/room";
 import type { RoomListItem } from "@/lib/types";
 
-// GET /api/rooms - public list of open rooms: lobbies (join to play) and running games (join to watch, play the next one).
+// GET /api/rooms - public list of every room: lobbies (join to play), running and just-finished games (join to watch, play the next one). Idle rooms are deleted by cleanupExpiredRooms.
 export async function GET() {
   await connection(); // always request-time, never prerendered at build
   return handle(async () => {
@@ -14,7 +14,7 @@ export async function GET() {
     const { data, error } = await db()
       .from(T.rooms)
       .select("code, name, status, settings, password_hash, players:yams_players!yams_players_room_id_fkey(role)")
-      .in("status", ["lobby", "playing"])
+      .in("status", ["lobby", "playing", "finished"])
       .order("last_activity_at", { ascending: false })
       .limit(50);
     if (error) throw error;

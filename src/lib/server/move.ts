@@ -4,7 +4,7 @@ import { notifyRoom } from "./broadcast";
 import type { PlayerRow, RoomRow } from "./db";
 import { fail, handle, readJson } from "./http";
 import { reportRound } from "./leaderboard";
-import { requireMember, requireStatus, saveRoom, withRetry } from "./room";
+import { buildState, requireMember, requireStatus, saveRoom, withRetry } from "./room";
 
 export interface MoveContext {
   room: RoomRow;
@@ -19,7 +19,7 @@ export interface MoveContext {
 /**
  * Shared body of every in-game write (roll, score, timeout): authenticates the caller,
  * applies the pure rule `apply` to the stored state and saves it with the optimistic lock
- * (retrying on a concurrent write). A finished game flips the room to "finished".
+ * (retrying on a concurrent write). Answers with the caller's new RoomState. A finished game flips the room to "finished".
  */
 export function moveHandler(
   req: Request,
@@ -50,12 +50,14 @@ export function moveHandler(
           if (err instanceof RuleError) fail(409, err.message);
           throw err;
         }
-        await saveRoom(room, { game: next, ...(next.phase === "over" ? { status: "finished" as const } : {}) });
-        return { roomId: room.id, finished: next.phase === "over" ? { code: room.code, round: room.round, game: next } : null };
+        const update = { game: next, ...(next.phase === "over" ? { status: "finished" as const } : {}) };
+        await saveRoom(room, update);
+        return { roomId: room.id, room: { ...room, ...update }, player, finished: next.phase === "over" ? { code: room.code, round: room.round, game: next } : null };
       },
     );
     if (result.finished) await reportRound(result.finished.code, result.finished.round, result.finished.game);
     await notifyRoom(result.roomId, kind);
-    return { ok: true };
+    // The caller gets the new state right away: no /state round trip after its own action.
+    return { ok: true, state: await buildState(result.room, result.player) };
   });
 }

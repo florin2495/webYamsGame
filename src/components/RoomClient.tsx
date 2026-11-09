@@ -55,17 +55,21 @@ function useRoomState(code: string, token: string) {
   const [state, setState] = useState<RoomState | null>(null);
   const [error, setError] = useState("");
   const [missing, setMissing] = useState(false);
-  const latest = useRef(0);
+  const latest = useRef(0); // id of the last request started
+  const applied = useRef(0); // id of the request (or action answer) the screen shows
 
   const refresh = useCallback(async () => {
     const id = ++latest.current;
     try {
       const s = await api<RoomState>(`/api/rooms/${code}/state`, { token });
-      if (id !== latest.current) return; // a newer request already answered
+      // Show any answer newer than what is on screen. Waiting for the *latest* request instead made
+      // every action wait for a second /state (broadcast refresh + post-action refresh).
+      if (id <= applied.current) return;
+      applied.current = id;
       setState({ ...s, clockOffset: s.serverNow - Date.now() });
       setError("");
     } catch (err) {
-      if (id !== latest.current) return;
+      if (id <= applied.current) return;
       if (err instanceof ApiRequestError && err.status === 401) {
         // Another tab may already hold a newer token for this room (seat reclaimed): keep that one.
         if (parseSession(readSessionRaw(code))?.token !== token) return;
@@ -78,6 +82,16 @@ function useRoomState(code: string, token: string) {
       }
     }
   }, [code, token]);
+
+  /**
+   * Shows the state a move answered with (roll, score, timeout) without a /state round trip.
+   * /state answers requested before it are older, so they are dropped.
+   */
+  const applyState = useCallback((s: RoomState) => {
+    applied.current = latest.current;
+    setState({ ...s, clockOffset: s.serverNow - Date.now() });
+    setError("");
+  }, []);
 
   // Bumping this tears the Realtime channel down and subscribes again (phones kill sockets in the background).
   const [reconnectKey, setReconnectKey] = useState(0);
@@ -138,11 +152,11 @@ function useRoomState(code: string, token: string) {
     };
   }, [roomId, refresh, reconnectKey]);
 
-  return { state, error, missing, refresh };
+  return { state, error, missing, refresh, applyState };
 }
 
 function Room({ code, token }: { code: string; token: string }) {
-  const { state, error, missing, refresh } = useRoomState(code, token);
+  const { state, error, missing, refresh, applyState } = useRoomState(code, token);
 
   if (missing) {
     return (
@@ -177,7 +191,7 @@ function Room({ code, token }: { code: string; token: string }) {
       {state.room.status === "lobby" ? (
         <Lobby state={state} token={token} refresh={refresh} />
       ) : (
-        <Game state={state} token={token} refresh={refresh} />
+        <Game state={state} token={token} refresh={refresh} applyState={applyState} />
       )}
       <SettingsPanel />
       <LeaveButton state={state} token={token} />

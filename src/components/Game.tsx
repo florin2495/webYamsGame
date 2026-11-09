@@ -30,7 +30,18 @@ const FALLBACK_SPECTATOR_MS = 6_000;
 
 const noHolds = () => [false, false, false, false, false];
 
-export function Game({ state, token, refresh }: { state: RoomState; token: string; refresh: () => Promise<void> }) {
+export function Game({
+  state,
+  token,
+  refresh,
+  applyState,
+}: {
+  state: RoomState;
+  token: string;
+  refresh: () => Promise<void>;
+  /** Shows the state a move answered with, instead of fetching /state again. */
+  applyState: (s: RoomState) => void;
+}) {
   const g = state.game!;
   const { room, me } = state;
   const isHost = room.hostPlayerId === me.id;
@@ -54,17 +65,24 @@ export function Game({ state, token, refresh }: { state: RoomState; token: strin
   const [viewSeat, setViewSeat] = useState<number | null>(null);
   const viewing = viewSeat ?? (playing ? (myTurn || g.mySeat === null ? g.turn : g.mySeat) : (g.mySeat ?? g.standings[0]?.seat ?? 0));
 
+  // Box I just picked: shown on my sheet right away, before the server answers (dropped on error).
+  const [picking, setPicking] = useState<{ category: Category; points: number } | null>(null);
+
+  /** Runs a move. The answer carries the new state (one request per action); other calls refresh instead. */
   async function run(fn: () => Promise<unknown>) {
     setBusy(true);
     setError("");
     try {
-      await fn();
-      await refresh();
+      const res = await fn();
+      const next = (res as { state?: RoomState } | null)?.state;
+      if (next) applyState(next);
+      else await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Eroare.");
       void refresh();
     } finally {
       setBusy(false);
+      setPicking(null);
     }
   }
 
@@ -106,6 +124,7 @@ export function Game({ state, token, refresh }: { state: RoomState; token: strin
     const pts = scoreFor(category, g.dice);
     const confirmZero = readPref(PREF_CONFIRM_ZERO) !== "0";
     if (pts === 0 && confirmZero && !window.confirm(`Tai „${CATEGORY_LABEL[category]}” cu 0 puncte?`)) return;
+    setPicking({ category, points: pts });
     void run(() => api(`${base}/score`, { token, body: { turn: g.turnKey, category } }));
   };
   const toggleHold = (i: number) => {
@@ -203,6 +222,7 @@ export function Game({ state, token, refresh }: { state: RoomState; token: strin
           seat={g.seats[viewing]}
           dice={g.dice}
           canPick={myTurn && viewing === g.mySeat && g.rolls > 0 && !busy}
+          pending={viewing === g.mySeat ? picking : null}
           onPick={pick}
         />
         {playing && g.mySeat !== null && !myTurn && viewing !== g.mySeat && (
@@ -240,16 +260,19 @@ function ScoreSheet({
   seat,
   dice,
   canPick,
+  pending,
   onPick,
 }: {
   seat: PublicSeat;
   dice: number[];
   canPick: boolean;
+  /** Box picked but not yet confirmed by the server. */
+  pending: { category: Category; points: number } | null;
   onPick: (c: Category) => void;
 }) {
   const { sheet, totals: t } = seat;
   const row = (c: Category) => {
-    const value = sheet[c];
+    const value = sheet[c] ?? (pending?.category === c ? pending.points : undefined);
     const free = value === undefined;
     const potential = free && canPick ? scoreFor(c, dice) : null;
     return (
