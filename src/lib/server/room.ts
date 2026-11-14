@@ -5,6 +5,7 @@ import {
   isRoomExpired,
   minutesLabel,
   PLAYING_IDLE_MINUTES,
+  ROOM_ABANDONED_MS,
   roundOf,
   ROOM_IDLE_MINUTES,
   type Settings,
@@ -53,6 +54,36 @@ export async function cleanupExpiredRooms(): Promise<void> {
   if (a.error) console.error("cleanup failed", a.error);
   const b = await db().from(T.rooms).delete().eq("status", "playing").lt("last_activity_at", long);
   if (b.error) console.error("cleanup failed", b.error);
+}
+
+/**
+ * Deletes rooms in ANY status (also "playing") with no activity for ROOM_ABANDONED_MS and no player or
+ * spectator seen within it (see isRoomAbandoned). Spectators are yams_players rows (role observer), so one
+ * embed covers both. Players cascade on delete. Best effort: a failure is logged, never thrown.
+ */
+export async function cleanupAbandonedRooms(): Promise<void> {
+  const now = Date.now();
+  const cutoff = new Date(now - ROOM_ABANDONED_MS).toISOString();
+  const { data, error } = await db()
+    .from(T.rooms)
+    .select("id, last_activity_at, players:yams_players!yams_players_room_id_fkey(last_seen_at)")
+    .lt("last_activity_at", cutoff)
+    .limit(200);
+  if (error) {
+    console.error("abandoned cleanup (select) failed", error);
+    return;
+  }
+  type Seen = { last_seen_at: string | null }[] | null;
+  const ids = (data ?? [])
+    .filter((r) => {
+      const seen = ((r.players as Seen) ?? []).map((m) => m.last_seen_at);
+      return isRoomAbandoned(r.last_activity_at as string, seen, now);
+    })
+    .map((r) => r.id as string);
+  if (ids.length === 0) return;
+  // Re-check the activity cutoff in the delete itself, so a room touched meanwhile survives.
+  const { error: delError } = await db().from(T.rooms).delete().in("id", ids).lt("last_activity_at", cutoff);
+  if (delError) console.error("abandoned cleanup (delete) failed", delError);
 }
 
 /** Records activity on a room, restarting its idle timer. */

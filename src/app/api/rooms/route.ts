@@ -3,14 +3,15 @@ import { NICKNAME_MAX } from "@/lib/game";
 import { hashDeviceId, hashPassword, hashToken, newPlayerToken, newRoomCode } from "@/lib/server/crypto";
 import { db, T } from "@/lib/server/db";
 import { cleanText, fail, handle, isUniqueViolation, readJson } from "@/lib/server/http";
-import { cleanupExpiredRooms, parseSettings, withDefaults } from "@/lib/server/room";
+import { cleanupAbandonedRooms, cleanupExpiredRooms, parseSettings, withDefaults } from "@/lib/server/room";
 import type { RoomListItem } from "@/lib/types";
 
 // GET /api/rooms - public list of every room: lobbies (join to play), running and just-finished games (join to watch, play the next one). Idle rooms are deleted by cleanupExpiredRooms.
+// Loading the list ("Intră în cameră") first sweeps abandoned rooms: no member seen and no activity for 120 s.
 export async function GET() {
   await connection(); // always request-time, never prerendered at build
   return handle(async () => {
-    await cleanupExpiredRooms();
+    await Promise.all([cleanupExpiredRooms(), cleanupAbandonedRooms()]);
     const { data, error } = await db()
       .from(T.rooms)
       .select("code, name, status, settings, password_hash, players:yams_players!yams_players_room_id_fkey(role)")

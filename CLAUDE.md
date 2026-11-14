@@ -35,6 +35,14 @@ Rules for schema changes:
   service key from `.env.local` (`node .claude/scripts/checkdb.mjs`, gitignored).
 - Never print or commit the keys in `.env.local`.
 
+## Abandoned rooms (120 s)
+- `GET /api/rooms` (the room list behind "Intră în cameră") first runs `cleanupAbandonedRooms` (`src/lib/server/room.ts`):
+  every room in ANY status (also `playing`) whose `last_activity_at` is older than `ROOM_ABANDONED_MS` (120 s, `game.ts`)
+  and with no player/spectator (`yams_players`, both roles) `last_seen_at` within 120 s is deleted (players cascade).
+  Open room pages keep both fresh (`/state` polls every 15 s, touches `last_seen_at` ≤ 10 s and `last_activity_at`
+  ≤ 20 s), so only rooms nobody has open disappear; the page shows its "room gone" screen on the next 404.
+  The 10 / 60-minute idle expiry stays too.
+
 ## Design
 - Pure rules in `src/lib/game.ts`: one score column, 13 boxes in any order; upper bonus +35 at ≥ 63; Brelan / Careu =
   sum of all dice, Full 25, Chintă mică 30, Chintă mare 40, Yams 50, Șansă = sum; every extra Yams after a Yams scored 50
