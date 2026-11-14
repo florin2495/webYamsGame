@@ -2,6 +2,7 @@ import "server-only";
 import {
   DEFAULT_SETTINGS,
   type GameState,
+  isRoomAbandoned,
   isRoomExpired,
   minutesLabel,
   PLAYING_IDLE_MINUTES,
