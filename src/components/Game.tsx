@@ -146,10 +146,14 @@ export function Game({
         <Card className={myTurn ? "ring-2 ring-indigo-500" : ""}>
           <div className="flex items-baseline justify-between gap-2">
             <h2 className="flex min-w-0 items-center gap-2 text-lg font-black">
-              <span className="truncate">{myTurn ? "🎯 E rândul tău!" : `Rândul lui ${turnSeat.name}`}</span>
+              <span className="truncate" data-testid="turn-badge">
+                {myTurn ? "🎯 E rândul tău!" : `Rândul lui ${turnSeat.name}`}
+              </span>
               {!myTurn && !turnSeat.left && <OfflineBadge connected={connected(turnSeat.playerId)} />}
             </h2>
-            <span className="shrink-0 text-sm text-zinc-500">tura {g.round}/13</span>
+            <span className="shrink-0 text-sm text-zinc-500" data-testid="round">
+              tura {g.round}/13
+            </span>
           </div>
           <div className="mt-2 flex items-center gap-2">
             <div className="h-2 flex-1 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
@@ -163,7 +167,7 @@ export function Game({
             </span>
           </div>
 
-          <div className="mt-4 flex justify-center gap-2">
+          <div className="mt-4 flex justify-center gap-2" data-testid="dice" data-roll={`${g.turnKey}|${g.rolls}|${g.dice.join("")}`}>
             {g.dice.map((d, i) => (
               <Die
                 key={`${i}:${rollId}`}
@@ -187,7 +191,12 @@ export function Game({
           </p>
 
           {myTurn && (
-            <Button className="mt-3 w-full" onClick={() => void rollDice()} disabled={busy || g.rolls >= ROLLS_PER_TURN || (g.rolls > 0 && allHeld)}>
+            <Button
+              className="mt-3 w-full"
+              onClick={() => void rollDice()}
+              disabled={busy || g.rolls >= ROLLS_PER_TURN || (g.rolls > 0 && allHeld)}
+              data-testid="roll"
+            >
               {g.rolls === 0 ? "🎲 Aruncă" : g.rolls >= ROLLS_PER_TURN ? "Nu mai ai aruncări" : `🎲 Aruncă din nou (${ROLLS_PER_TURN - g.rolls} rămase)`}
             </Button>
           )}
@@ -235,7 +244,11 @@ export function Game({
       {playing && <Standings g={g} connected={connected} />}
       {g.mySeat === null && (
         <>
-          {playing && <p className="text-center text-sm text-zinc-500">Ești spectator: vezi tot, dar nu poți acționa.</p>}
+          {playing && (
+            <p className="text-center text-sm text-zinc-500" data-testid="spectator-status">
+              Ești spectator: vezi tot, dar nu poți acționa.
+            </p>
+          )}
           <QueueButton state={state} token={token} refresh={refresh} />
         </>
       )}
@@ -286,6 +299,9 @@ function ScoreSheet({
             <button
               type="button"
               onClick={() => onPick(c)}
+              data-testid="score-box"
+              data-category={c}
+              data-points={potential}
               className={`min-h-9 w-16 rounded-lg border font-mono font-bold ${
                 potential > 0
                   ? "border-indigo-400 bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
@@ -296,7 +312,9 @@ function ScoreSheet({
               {potential}
             </button>
           ) : (
-            <span className={`font-mono font-bold ${value === 0 ? "text-zinc-400 line-through" : ""}`}>{free ? "" : value}</span>
+            <span className={`font-mono font-bold ${value === 0 ? "text-zinc-400 line-through" : ""}`} data-testid={free ? undefined : "score-value"} data-category={c}>
+              {free ? "" : value}
+            </span>
           )}
         </td>
       </tr>
@@ -365,7 +383,7 @@ function Results({
   const medal = (p: number | null) => (p === 1 ? "🥇" : p === 2 ? "🥈" : p === 3 ? "🥉" : (p ?? "–"));
   const winners = g.standings.filter((r) => r.place === 1).map((r) => r.name);
   return (
-    <Card className="ring-2 ring-amber-400">
+    <Card className="ring-2 ring-amber-400" testId="results">
       <h2 className="text-center text-xl font-black">🏆 {winners.length > 1 ? `Egalitate: ${winners.join(", ")}` : `A câștigat ${winners[0] ?? "nimeni"}!`}</h2>
       <ol className="mt-3 flex flex-col divide-y divide-zinc-200 dark:divide-zinc-800">
         {g.standings.map((r) => (
@@ -383,7 +401,7 @@ function Results({
       <AllSheets g={g} />
       <ErrorText>{error}</ErrorText>
       {isHost ? (
-        <Button className="mt-3 w-full" onClick={onNewRound} disabled={busy}>
+        <Button className="mt-3 w-full" onClick={onNewRound} disabled={busy} data-testid="new-round">
           🎲 Rundă nouă
         </Button>
       ) : (

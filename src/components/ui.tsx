@@ -34,9 +34,10 @@ export function Field({ label, ...props }: ComponentProps<"input"> & { label: st
   );
 }
 
-export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
+export function Card({ children, className = "", testId }: { children: ReactNode; className?: string; testId?: string }) {
   return (
     <section
+      data-testid={testId}
       className={`rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 ${className}`}
     >
       {children}

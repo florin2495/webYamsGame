@@ -55,7 +55,9 @@ export function Lobby({ state, token, refresh }: { state: RoomState; token: stri
             {n}/{MAX_PLAYERS}
           </span>
         </div>
-        <Members list={seated} state={state} token={token} refresh={refresh} empty="Nimeni la masă încă." onMove={isHost ? move : undefined} moveDisabled={busy} />
+        <div data-testid="player-list">
+          <Members list={seated} state={state} token={token} refresh={refresh} empty="Nimeni la masă încă." onMove={isHost ? move : undefined} moveDisabled={busy} />
+        </div>
         {n < MIN_PLAYERS && (
           <p className="mt-2 text-sm text-zinc-500">
             Mai trebuie {MIN_PLAYERS - n} {MIN_PLAYERS - n === 1 ? "jucător" : "jucători"}. Apasă pe cod (sus) ca să trimiți invitația.
@@ -66,7 +68,9 @@ export function Lobby({ state, token, refresh }: { state: RoomState; token: stri
       {watching.length > 0 && (
         <Card>
           <h2 className="mb-2 font-bold">👀 Spectatori</h2>
-          <Members list={watching} state={state} token={token} refresh={refresh} empty="" />
+          <div data-testid="spectator-list">
+            <Members list={watching} state={state} token={token} refresh={refresh} empty="" />
+          </div>
           <p className="mt-2 text-xs text-zinc-500">Spectatorii pot intra la masă dacă e loc, sau la runda următoare.</p>
         </Card>
       )}
@@ -80,7 +84,7 @@ export function Lobby({ state, token, refresh }: { state: RoomState; token: stri
 
       <ErrorText>{error}</ErrorText>
       {isHost ? (
-        <Button onClick={() => void start()} disabled={busy || !canStart}>
+        <Button onClick={() => void start()} disabled={busy || !canStart} data-testid="start-game">
           {n < MIN_PLAYERS
             ? `Ai nevoie de cel puțin ${MIN_PLAYERS} jucători`
             : notReady.length > 0
@@ -89,7 +93,7 @@ export function Lobby({ state, token, refresh }: { state: RoomState; token: stri
         </Button>
       ) : me.role === "player" ? (
         <>
-          <Button variant={me.ready ? "secondary" : "primary"} onClick={() => void toggleReady()} disabled={busy}>
+          <Button variant={me.ready ? "secondary" : "primary"} onClick={() => void toggleReady()} disabled={busy} data-testid="ready">
             {me.ready ? "✓ Ești ready (apasă ca să anulezi)" : "Sunt ready"}
           </Button>
           <p className="text-center text-sm text-zinc-500">

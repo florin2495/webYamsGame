@@ -2,7 +2,8 @@
 // Usage: node scripts/e2e.mjs [baseUrl incl. /yams] [vercelProjectUrl incl. /yams]
 // Default: production (https://games.hailatat.icu/yams). Local: node scripts/e2e.mjs http://localhost:3011/yams
 // Rooms are named "e2e-test-..."; every room it creates is deleted at the end (leave as everyone, then a DB
-// delete of leftovers as a safety net, service key from .env.local). Sends nothing to /api/feedback.
+// delete of leftovers as a safety net: env NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY, else .env.local).
+// Sends nothing to /api/feedback.
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 
@@ -89,8 +90,16 @@ async function httpChecks() {
   const iconRes = await Promise.all(icons.map((src) => fetch(origin + src)));
   check(iconRes.every((x) => x.status === 200 && /image/.test(x.headers.get("content-type") ?? "")), `${icons.length} icons = 200 image/*`);
   check(html.includes(`${basePath}/manifest.webmanifest`) && html.includes(`${basePath}/pwa-icons/apple`), "page links manifest and apple icon under the base path");
-  const roomPage = await fetch(`${BASE}/room/XXXXXX`);
+  const roomPage = await fetch(`${BASE}/room/XXXXXX`, { cache: "no-store" });
+  const roomHtml = await roomPage.text();
   check(roomPage.status === 200, `GET ${basePath}/room/XXXXXX = ${roomPage.status}`);
+  // The version is shown in the settings panel (room page): look in the JS chunks of both pages.
+  const version = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
+  let hasVersion = false;
+  for (const a of [...new Set([...assets, ...assetsOf(roomHtml, basePath)])].filter((x) => x.endsWith(".js"))) {
+    if ((await (await fetch(origin + a)).text()).includes(`"${version}"`)) hasVersion = true;
+  }
+  check(hasVersion, `client JS contains version ${version}`);
   if (VERCEL) {
     const v = await fetch(VERCEL, { cache: "no-store" });
     const vAssets = assetsOf(await v.text(), basePath);
@@ -281,17 +290,25 @@ async function main() {
   created.delete(code);
 }
 
-/** Safety net: delete rooms left behind by a failed run, straight in the DB (service key from .env.local). */
+/** Supabase URL + service key: environment (GitHub Actions secrets) first, else .env.local. */
+function supabaseEnv() {
+  const { NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = process.env;
+  if (NEXT_PUBLIC_SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) return { NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY };
+  return Object.fromEntries(
+    readFileSync(new URL("../.env.local", import.meta.url), "utf8")
+      .split(/?
+/)
+      .filter((l) => l.includes("=") && !l.startsWith("#"))
+      .map((l) => [l.slice(0, l.indexOf("=")).trim(), l.slice(l.indexOf("=") + 1).trim().replace(/^"|"$/g, "")]),
+  );
+}
+
+/** Safety net: delete rooms left behind by a failed run, straight in the DB (service key from env or .env.local). */
 async function cleanup() {
   if (created.size === 0) return;
   try {
-    const env = Object.fromEntries(
-      readFileSync(".env.local", "utf8")
-        .split(/\r?\n/)
-        .filter((l) => l.includes("=") && !l.startsWith("#"))
-        .map((l) => [l.slice(0, l.indexOf("=")).trim(), l.slice(l.indexOf("=") + 1).trim()]),
-    );
-    const url = `${env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/yams_rooms?code=in.(${[...created].join(",")})`;
+    const env = supabaseEnv();
+    const url = `${env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/yams_rooms?code=in.(${[...created].join(",")})&name=like.e2e-test-*`;
     const key = env.SUPABASE_SERVICE_ROLE_KEY;
     const res = await fetch(url, { method: "DELETE", headers: { apikey: key, authorization: `Bearer ${key}` } });
     console.log(`  cleanup: deleted leftover rooms ${[...created].join(", ")} (${res.status})`);

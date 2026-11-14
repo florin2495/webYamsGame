@@ -237,7 +237,7 @@ function LeaveButton({ state, token }: { state: RoomState; token: string }) {
 
   return (
     <div className="pb-6 pt-2 text-center">
-      <Button variant="danger" className="w-full" onClick={() => void leave()} disabled={busy}>
+      <Button variant="danger" className="w-full" onClick={() => void leave()} disabled={busy} data-testid="leave">
         {busy ? "Se iese…" : stillIn ? "Părăsește partida" : "Părăsește camera"}
       </Button>
       <div className="mt-2">
@@ -346,7 +346,7 @@ function JoinForm({ code }: { code: string }) {
             autoComplete="off"
           />
           <ErrorText>{error}</ErrorText>
-          <Button type="submit" disabled={busy}>
+          <Button type="submit" disabled={busy} data-testid="join-submit">
             {busy ? "Se încarcă…" : "Intră în cameră"}
           </Button>
           <p className="text-center text-xs text-zinc-500">Dacă partida a început deja, intri ca spectator și joci de la următoarea.</p>

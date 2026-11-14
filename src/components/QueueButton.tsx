@@ -27,7 +27,7 @@ export function QueueButton({ state, token, refresh }: { state: RoomState; token
 
   return (
     <div className="flex flex-col gap-1">
-      <Button variant={me.queued ? "secondary" : "primary"} onClick={() => void toggle()} disabled={busy}>
+      <Button variant={me.queued ? "secondary" : "primary"} onClick={() => void toggle()} disabled={busy} data-testid="queue-toggle">
         {me.queued ? "✓ Ești în coadă pentru runda următoare (anulează)" : "Intră la runda următoare"}
       </Button>
       <ErrorText>{error}</ErrorText>

@@ -83,6 +83,7 @@ export function Die({
       type="button"
       onClick={onClick}
       aria-pressed={held}
+      data-testid="die"
       aria-label={label ?? `zar ${value}${held ? ", păstrat" : ""}`}
       className={`rounded-2xl transition-transform active:scale-95 ${held ? "-translate-y-1" : ""}`}
     >

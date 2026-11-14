@@ -3,7 +3,7 @@
 # webYamsGame - project notes for Claude
 
 ## Accounts and deploy
-- GitHub: personal account **florin2495** only (repo `florin2495/webYamsGame`, private). Never the work account.
+- GitHub: personal account **florin2495** only (repo `florin2495/webYamsGame`, public). Never the work account.
   Local git identity is pinned in `.git/config` (Florin Radu / marchidan.florin24@gmail.com).
 - The user connects the repo to Vercel by hand. Once connected, every push to `main` deploys to production:
   https://games.hailatat.icu/yams (the hub proxies `/yams/*` to this project; `basePath: "/yams"` in `next.config.ts`).
@@ -69,15 +69,46 @@ Rules for schema changes:
 
 - Leaderboard (contract C): `src/lib/server/leaderboard.ts` `reportRound` upserts `hub_leaderboard` (game `yams`, player_key = lowercase nickname) once per (room, round) via `hub_leaderboard_rounds`; winners = place 1, players who left are not counted. Needs the hub's `002_hub_leaderboard.sql` applied (hub-owned). Never throws.
 
-## Testing
-- `npm test` (Vitest, `src/lib/game.test.ts` incl. full games with 2/5/16 players, `kick.test.ts`, `reconnect.test.ts`), `npx tsc --noEmit`,
-  `npx eslint src`, `npx next build`.
-- End-to-end: `node scripts/e2e.mjs [baseUrl] [vercelUrl]` (default production `https://games.hailatat.icu/yams`;
-  local: `http://localhost:3011/yams`) first checks page / `_next` assets / manifest / icons / `room/XXXXXX` over HTTP
-  and that `011web-yams-game.vercel.app/yams` serves the same build, then drives the real API with 3 players and a
-  spectator: create (with password), join, wrong/missing password, forged/missing token, rejoin with the saved token and
-  by nickname (same device = reclaim, other device = 409, old token dead, also mid-game), lobby kick/leave, settings,
-  ready, start, roll/hold/score, illegal moves, out-of-turn errors, same view for everyone, timeout (20 s timer), kick
-  with "Ignoră", pending kick enforced, leave mid-game, full game to the end (totals and winner checked), new round
-  (spectator seated). Rooms are named `e2e-test-…` and deleted at the end; it never calls `/api/feedback`.
-  Dev server: `npm run dev -- -p 3011` (`.claude/launch.json` → `yams-dev`).
+## Testing (GitHub Actions, manual only)
+All checks run in GitHub Actions on the free tier (public repo, standard `ubuntu-latest` runners only, never billed
+runners), never locally (user's rule, see `D:\_DEv\CLAUDE.md`). Every workflow is `workflow_dispatch`
+only (no automatic trigger, the user's choice): nothing gates a push, and Vercel deploys `main` regardless.
+Start one with `gh workflow run <file> --ref main`, then `gh run watch` (or the Actions tab, "Run workflow").
+| Workflow | Runs |
+| --- | --- |
+| `.github/workflows/check.yml` "Check code" | `npx next typegen` + `npx tsc --noEmit` (typegen first, so route types in `.next/types` are checked), `npx eslint src`, `npx next build`. Every step runs even if an earlier one failed |
+| `.github/workflows/unit-tests.yml` "Unit tests" | `npm test` (Vitest: `src/lib/game.test.ts` incl. full games with 2/5/16 players, `kick.test.ts`, `reconnect.test.ts`; pure logic, no DB) |
+| `.github/workflows/e2e.yml` "E2E" | `node scripts/e2e.mjs <base_url>` (input, default production `https://games.hailatat.icu/yams`); one run at a time |
+| `.github/workflows/e2e-ui.yml` "E2E UI (Playwright)" | `npx playwright test` (`playwright.config.ts`, tests in `tests/ui/*.e2e.ts`) against `base_url` (`E2E_BASE_URL`, default production), on desktop Chromium and an emulated iPhone 13 (WebKit). Same concurrency group as "E2E". On failure the report (traces, screenshots, videos) is uploaded as the `playwright-report` artifact |
+
+- E2E needs the repo secrets `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (only for the cleanup safety net;
+  locally the script falls back to `.env.local`). It checks that the deployed client JS contains the `package.json`
+  version of the checked-out ref, so run it on `main` after the Vercel deploy of that version has finished.
+- What E2E does (`scripts/e2e.mjs [baseUrl] [vercelUrl]`, Node built-ins only): checks page / `_next` assets / version
+  in the client JS / manifest / icons / `room/XXXXXX` over HTTP and that `011web-yams-game.vercel.app/yams` serves the
+  same build, then drives the real API (production DB) with 3 players and a spectator: create (with password), join,
+  wrong/missing password, forged/missing token, rejoin with the saved token and by nickname (same device = reclaim,
+  other device = 409, old token dead, also mid-game), lobby kick/leave, settings, ready, start, roll/hold/score, illegal
+  moves, out-of-turn errors, same view for everyone, spectator 403s, timeout (20 s timer), kick with "Ignoră", pending
+  kick enforced, leave mid-game, full game to the end (totals and winner checked), new round (spectator seated).
+  Rooms are named `e2e-test-…` and deleted at the end; it never calls `/api/feedback`.
+- What E2E UI does (`tests/ui/`, shared steps in `helpers.ts`; every change must reach the other screens within 5 s
+  without a reload, polling is 15 s, so this checks Realtime; dice are random, so each move is picked from the boxes
+  the screen offers: roll once, write the best box, a 0 box is confirmed):
+  - `game.e2e.ts` (both projects): two browser contexts (= two devices) create a room (60 s turns), join by link,
+    ready, start, play the full game (13 rounds each; every roll and turn change seen live by the other), same results
+    on both screens, new round followed live, leave.
+  - `spectator.e2e.ts` (desktop Chromium only): a third person joins mid-game = spectator (no roll button, dice or
+    boxes), queues ("Ești în coadă"), sees every roll and turn live, the guest leaves mid-game and the host finishes
+    alone, the spectator sees the results ("a plecat"), and the new round seats them.
+  - `mobile.e2e.ts` (iPhone only): no horizontal scroll on home / lobby / game, dice and score boxes >= 24 px, touch
+    taps roll, hold a die and write a box, seen live on the other phone.
+  Rooms are `e2e-test-ui-…`; a leftover is deleted with the service key from the same repo secrets. (Known: finished
+  test games are reported to the hub leaderboard.)
+- Playwright files are `*.e2e.ts`, never `*.spec.ts` / `*.test.ts` (Vitest would pick those up).
+- The UI tests find elements by `data-testid`: `home-submit`, `join-submit`, `leave` (RoomClient), `player-list`,
+  `spectator-list`, `ready`, `start-game` (Lobby), `queue-toggle` (QueueButton), `turn-badge`, `round`, `dice`
+  (`data-roll` = `turnKey|rolls|dice`), `die` (clickable die, `aria-pressed` = held; Dice.tsx), `roll`, `score-box`
+  (`data-category`, `data-points`), `score-value` (`data-category`), `spectator-status`, `results`, `new-round` (Game).
+  Renaming or removing one breaks `tests/ui`.
+- Dev server (only if the user asks): `npm run dev -- -p 3011` (`.claude/launch.json` → `yams-dev`).
