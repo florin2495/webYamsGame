@@ -296,8 +296,7 @@ function supabaseEnv() {
   if (NEXT_PUBLIC_SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) return { NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY };
   return Object.fromEntries(
     readFileSync(new URL("../.env.local", import.meta.url), "utf8")
-      .split(/?
-/)
+      .split(/\r?\n/)
       .filter((l) => l.includes("=") && !l.startsWith("#"))
       .map((l) => [l.slice(0, l.indexOf("=")).trim(), l.slice(l.indexOf("=") + 1).trim().replace(/^"|"$/g, "")]),
   );
