@@ -3,8 +3,6 @@ name: Check code
 # Manual only (Actions tab > Run workflow, or `gh workflow run check.yml --ref main`).
 on:
   workflow_dispatch:
-  push:
-    branches: [fix/abandoned-rooms] # TEMP: remove before merging to main
 
 permissions:
   contents: read
