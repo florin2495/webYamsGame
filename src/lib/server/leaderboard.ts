@@ -7,15 +7,21 @@ const GAME = "yams";
 /** player_key = nickname, lowercase, trimmed (no accounts: same nickname = same person). */
 export const playerKey = (nickname: string) => nickname.trim().toLowerCase().slice(0, 40);
 
+/** Rooms created by the e2e tests (scripts/e2e.mjs, tests/ui) never reach the shared leaderboard. */
+export function isTestRoom(roomName: string): boolean {
+  return roomName.startsWith("e2e-test-");
+}
+
 /**
  * Contract C: reports a finished round to the hub's shared leaderboard (hub_leaderboard*, owned by the hub).
  * Idempotent: the (game, room, round) row in hub_leaderboard_rounds is claimed first, so a round is counted once
- * even when several requests see the game end. Players who left mid-game are not counted. Never throws: a
- * leaderboard problem must not break the game.
+ * even when several requests see the game end. Players who left mid-game are not counted. Test rooms
+ * (isTestRoom) are skipped. Never throws: a leaderboard problem must not break the game.
  */
-export async function reportRound(roomCode: string, roundNo: number, game: GameState): Promise<void> {
+export async function reportRound(room: { code: string; name: string; round: number }, game: GameState): Promise<void> {
+  if (isTestRoom(room.name)) return;
   try {
-    const claim = await db().from("hub_leaderboard_rounds").insert({ game: GAME, room_code: roomCode, round_no: roundNo });
+    const claim = await db().from("hub_leaderboard_rounds").insert({ game: GAME, room_code: room.code, round_no: room.round });
     if (claim.error) {
       if (claim.error.code !== "23505") console.error("leaderboard claim failed", claim.error);
       return;

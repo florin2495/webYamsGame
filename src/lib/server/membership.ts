@@ -52,7 +52,7 @@ export async function removePlayer(room: RoomRow, playerId: string, reason: stri
   const { error: deleteError } = await db().from(T.players).delete().eq("id", playerId);
   if (deleteError) throw deleteError;
 
-  if (result.finishedGame) await reportRound(room.code, result.round, result.finishedGame);
+  if (result.finishedGame) await reportRound({ code: room.code, name: room.name, round: result.round }, result.finishedGame);
   await notifyRoom(room.id, reason);
   return { roomClosed: false };
 }

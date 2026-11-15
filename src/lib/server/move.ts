@@ -52,10 +52,10 @@ export function moveHandler(
         }
         const update = { game: next, ...(next.phase === "over" ? { status: "finished" as const } : {}) };
         await saveRoom(room, update);
-        return { roomId: room.id, room: { ...room, ...update }, player, finished: next.phase === "over" ? { code: room.code, round: room.round, game: next } : null };
+        return { roomId: room.id, room: { ...room, ...update }, player, finished: next.phase === "over" ? { room: { code: room.code, name: room.name, round: room.round }, game: next } : null };
       },
     );
-    if (result.finished) await reportRound(result.finished.code, result.finished.round, result.finished.game);
+    if (result.finished) await reportRound(result.finished.room, result.finished.game);
     await notifyRoom(result.roomId, kind);
     // The caller gets the new state right away: no /state round trip after its own action.
     return { ok: true, state: await buildState(result.room, result.player) };
