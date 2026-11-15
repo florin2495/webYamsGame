@@ -1,5 +1,5 @@
 // Scenario 2: someone opens the invite link of a running game. They become a spectator (no dice to roll, no boxes
-// to pick), see every roll and turn live, queue for the next round, see a player leave mid-game and the host finish
+// to pick), the players see them (and later "în coadă") on the game screen, they see every roll and turn live, queue for the next round, see a player leave mid-game and the host finish
 // alone, see the results, and the host's "Rundă nouă" seats them. Desktop Chromium only: it checks game logic and
 // Realtime, the device does not matter (scenario 1 already runs on WebKit).
 import { expect, test } from "@playwright/test";
@@ -25,9 +25,20 @@ test("a late joiner watches as a spectator and plays from the next round", async
       for (const id of ["roll", "score-box", "die", "ready", "start-game"]) await expect(sp.getByTestId(id)).toHaveCount(0);
     });
 
+    await test.step("the players see the spectator on the game screen, live", async () => {
+      for (const p of [host, guest]) {
+        const list = p.page.getByTestId("game-spectators");
+        await expect(list).toContainText(spectator.name, { timeout: REALTIME_MS });
+        await expect(list).not.toContainText("în coadă");
+      }
+    });
+
     await test.step("the spectator queues for the next round", async () => {
       await spectator.page.getByTestId("queue-toggle").click();
       await expect(spectator.page.getByTestId("queue-toggle")).toContainText("Ești în coadă");
+      for (const p of [host, guest]) {
+        await expect(p.page.getByTestId("game-spectators")).toContainText("în coadă", { timeout: REALTIME_MS });
+      }
     });
 
     await test.step("one round is played; the spectator sees every roll and turn live", () =>

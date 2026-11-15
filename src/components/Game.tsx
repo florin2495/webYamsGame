@@ -21,6 +21,7 @@ import {
 } from "@/lib/game";
 import type { PublicGame, PublicSeat, RoomState } from "@/lib/types";
 import { QueueButton } from "./QueueButton";
+import { SpectatorPanel } from "./SpectatorPanel";
 import { Die, MiniDice } from "./Dice";
 import { Button, Card, ErrorText, OfflineBadge } from "./ui";
 
@@ -242,6 +243,7 @@ export function Game({
       </Card>
 
       {playing && <Standings g={g} connected={connected} />}
+      <SpectatorPanel state={state} token={token} refresh={refresh} />
       {g.mySeat === null && (
         <>
           {playing && (
