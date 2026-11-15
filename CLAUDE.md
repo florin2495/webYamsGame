@@ -90,7 +90,7 @@ Start one with `gh workflow run <file> --ref main`, then `gh run watch` (or the 
   wrong/missing password, forged/missing token, rejoin with the saved token and by nickname (same device = reclaim,
   other device = 409, old token dead, also mid-game), lobby kick/leave, settings, ready, start, roll/hold/score, illegal
   moves, out-of-turn errors, same view for everyone, spectator 403s, timeout (20 s timer), kick with "Ignoră", pending
-  kick enforced, leave mid-game, full game to the end (totals and winner checked), new round (spectator seated).
+  kick enforced, leave mid-game, full game to the end (totals and winner checked), spectator queue, new round (queued spectator seated).
   Rooms are named `e2e-test-…` and deleted at the end; it never calls `/api/feedback`.
 - What E2E UI does (`tests/ui/`, shared steps in `helpers.ts`; every change must reach the other screens within 5 s
   without a reload, polling is 15 s, so this checks Realtime; dice are random, so each move is picked from the boxes

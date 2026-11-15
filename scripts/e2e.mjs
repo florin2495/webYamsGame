@@ -277,6 +277,10 @@ async function main() {
   check((await call(`/api/rooms/${code}/roll`, { token: A.token, body: { held: [false, false, false, false, false] } })).status === 409, "roll after the game = 409");
 
   console.log("New round");
+  check((await call(`/api/rooms/${code}/queue`, { token: A.token, body: { queued: true } })).status === 409, "player queue = 409");
+  const q = await call(`/api/rooms/${code}/queue`, { token: D.token, body: { queued: true } });
+  check(q.status === 200 && q.data.queued === true && q.data.seated === false, "spectator queues for the next round");
+  check((await state(code, A)).players.find((p) => p.id === D.playerId)?.queued === true, "players see the queue");
   check((await call(`/api/rooms/${code}/new-round`, { token: D.token, body: {} })).status === 403, "non-host new round = 403");
   check((await call(`/api/rooms/${code}/new-round`, { token: A.token, body: {} })).status === 200, "host new round");
   s = await state(code, D);
