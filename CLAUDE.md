@@ -26,7 +26,7 @@ so this list is the source of truth. **Update it whenever the user confirms a mi
 | --- | --- | --- |
 | `supabase/schema.sql` (initial) | yes (2026-11-07, verified: columns selectable, anon gets 401) | `yams_rooms` (game state in jsonb `game`), `yams_players` (`role`, `ready`, `kick_requested_at`) |
 | `supabase/migrations/002_reconnect.sql` | yes (2026-11-07, verified: service role 200, anon 401) | `yams_players.last_seen_at`, `device_hash` + index (rejoin the same seat). |
-| `supabase/migrations/003_seat_queue.sql` | yes (2026-11-08, verified: seat/queued_at selectable with service role) | `yams_players.seat` (host-chosen order, contract A) + `queued_at` (spectator queue, contract B). `/reorder`, `/queue`, start and new-round need it. |
+| `supabase/migrations/003_seat_queue.sql` | yes (2026-11-08, verified: seat/queued_at selectable with service role; verified again 2026-11-14 by effect: production E2E exercises its columns) | `yams_players.seat` (host-chosen order, contract A) + `queued_at` (spectator queue, contract B). `/reorder`, `/queue`, start and new-round need it. |
 
 Rules for schema changes:
 - New migration = new numbered file in `supabase/migrations/` (`002_…sql`, …), additive when possible, and the same
@@ -35,19 +35,20 @@ Rules for schema changes:
   service key from `.env.local` (`node .claude/scripts/checkdb.mjs`, gitignored).
 - Never print or commit the keys in `.env.local`.
 
-## Abandoned rooms (120 s)
+## Abandoned rooms (600 s)
 - `GET /api/rooms` (the room list behind "Intră în cameră") first runs `cleanupAbandonedRooms` (`src/lib/server/room.ts`):
-  every room in ANY status (also `playing`) whose `last_activity_at` is older than `ROOM_ABANDONED_MS` (120 s, `game.ts`)
-  and with no player/spectator (`yams_players`, both roles) `last_seen_at` within 120 s is deleted (players cascade).
-  Open room pages keep both fresh (`/state` polls every 15 s, touches `last_seen_at` ≤ 10 s and `last_activity_at`
-  ≤ 20 s), so only rooms nobody has open disappear; the page shows its "room gone" screen on the next 404.
-  The 10 / 60-minute idle expiry stays too.
+  every room in ANY status (also `playing`) whose `last_activity_at` is older than `ROOM_ABANDONED_MS` (600 s, `game.ts`)
+  and with no player/spectator (`yams_players`, both roles) `last_seen_at` within 600 s is deleted (players cascade).
+  Open room pages keep both fresh (`/state` polls every 60 s, touches `last_seen_at` ≤ 10 s and `last_activity_at`
+  ≤ 20 s), so only rooms nobody has open disappear; the page shows its neutral "room gone" screen on the next 404
+  ("Camera nu mai există (a fost închisă după inactivitate)."). Unit-tested with the DB mocked in
+  `src/lib/server/room.test.ts`. The 10 / 60-minute idle expiry stays too.
 
 ## Design
 - Pure rules in `src/lib/game.ts`: one score column, 13 boxes in any order; upper bonus +35 at ≥ 63; Brelan / Careu =
   sum of all dice, Full 25, Chintă mică 30, Chintă mare 40, Yams 50, Șansă = sum; every extra Yams after a Yams scored 50
-  gives +100 (dice go in another box as usual, no joker rule). 3 rolls per turn, players take turns (host first, then
-  join order).
+  gives +100 (dice go in another box as usual, no joker rule). 3 rolls per turn, players take turns (host first: the creator
+  gets seat 0, then the lobby order).
 - Turn timer 20-60 s (room setting, step 5). On expiry `forceTurn`: roll once if the player has not rolled, then the
   free box worth the most (ties: first in sheet order). Consecutive timeouts are only shown (no auto-skip).
 - The whole game state is one jsonb column `yams_rooms.game`, written with an optimistic lock on `yams_rooms.version`
@@ -61,13 +62,13 @@ Rules for schema changes:
   Lazy cleanup on room list / create / room access.
 - Rejoin the same seat (`src/lib/reconnect.ts`): every member request stamps `last_seen_at` (≤ every 10 s);
   re-joining with an existing nickname reclaims that seat (new token, same role, pending kick dropped) from the same
-  device (`device_hash`) or once the seat has been unseen for 45 s, also mid-game. `/state` exposes only a derived
+  device (`device_hash`) or once the seat has been unseen for 301 s (`DISCONNECT_MS`), also mid-game. `/state` exposes only a derived
   `connected` flag ("deconectat" badge). Home shows "Revino în camera …" for stored sessions that are still valid.
 - Kick: in the lobby immediate; during a game a 10 s pending kick the player can "Ignoră" (`kick_requested_at`).
-- Realtime: Broadcast topic `yams:room:<uuid>` carries no data, clients re-fetch `/state`; 15 s polling fallback.
+- Realtime: Broadcast topic `yams:room:<uuid>` carries no data, clients re-fetch `/state`; 60 s polling fallback.
 - Per-device settings (localStorage): sound, vibration, confirm before a 0 box.
 
-- Leaderboard (contract C): `src/lib/server/leaderboard.ts` `reportRound` upserts `hub_leaderboard` (game `yams`, player_key = lowercase nickname) once per (room, round) via `hub_leaderboard_rounds`; winners = place 1, players who left are not counted. Needs the hub's `002_hub_leaderboard.sql` applied (hub-owned). Never throws.
+- Leaderboard (contract C): `src/lib/server/leaderboard.ts` `reportRound` upserts `hub_leaderboard` (game `yams`, player_key = lowercase nickname) once per (room, round) via `hub_leaderboard_rounds`; winners = place 1, players who left are not counted; test rooms (name starts with `e2e-test-`, `isTestRoom`) are never reported. Needs the hub's `002_hub_leaderboard.sql` applied (hub-owned). Never throws.
 
 ## Testing (GitHub Actions, manual only)
 All checks run in GitHub Actions on the free tier (public repo, standard `ubuntu-latest` runners only, never billed
@@ -77,7 +78,7 @@ Start one with `gh workflow run <file> --ref main`, then `gh run watch` (or the 
 | Workflow | Runs |
 | --- | --- |
 | `.github/workflows/check.yml` "Check code" | `npx next typegen` + `npx tsc --noEmit` (typegen first, so route types in `.next/types` are checked), `npx eslint src`, `npx next build`. Every step runs even if an earlier one failed |
-| `.github/workflows/unit-tests.yml` "Unit tests" | `npm test` (Vitest: `src/lib/game.test.ts` incl. full games with 2/5/16 players, `kick.test.ts`, `reconnect.test.ts`; pure logic, no DB) |
+| `.github/workflows/unit-tests.yml` "Unit tests" | `npm test` (Vitest, `vitest.config.ts` maps the `@/` alias: `src/lib/game.test.ts` incl. full games with 2/5/16 players, `kick.test.ts`, `reconnect.test.ts`, `server/room.test.ts` (abandoned-room cleanup) and `server/leaderboard.test.ts` (test rooms skipped), with `server-only` and the db module mocked; no real DB) |
 | `.github/workflows/e2e.yml` "E2E" | `node scripts/e2e.mjs <base_url>` (input, default production `https://games.hailatat.icu/yams`); one run at a time |
 | `.github/workflows/e2e-ui.yml` "E2E UI (Playwright)" | `npx playwright test` (`playwright.config.ts`, tests in `tests/ui/*.e2e.ts`) against `base_url` (`E2E_BASE_URL`, default production), on desktop Chromium and an emulated iPhone 13 (WebKit). Same concurrency group as "E2E". On failure the report (traces, screenshots, videos) is uploaded as the `playwright-report` artifact |
 
@@ -93,22 +94,23 @@ Start one with `gh workflow run <file> --ref main`, then `gh run watch` (or the 
   kick enforced, leave mid-game, full game to the end (totals and winner checked), spectator queue, new round (queued spectator seated).
   Rooms are named `e2e-test-…` and deleted at the end; it never calls `/api/feedback`.
 - What E2E UI does (`tests/ui/`, shared steps in `helpers.ts`; every change must reach the other screens within 5 s
-  without a reload, polling is 15 s, so this checks Realtime; dice are random, so each move is picked from the boxes
+  without a reload, polling is 60 s, so this checks Realtime; dice are random, so each move is picked from the boxes
   the screen offers: roll once, write the best box, a 0 box is confirmed):
   - `game.e2e.ts` (both projects): two browser contexts (= two devices) create a room (60 s turns), join by link,
     ready, start, play the full game (13 rounds each; every roll and turn change seen live by the other), same results
     on both screens, new round followed live, leave.
   - `spectator.e2e.ts` (desktop Chromium only): a third person joins mid-game = spectator (no roll button, dice or
-    boxes), queues ("Ești în coadă"), sees every roll and turn live, the guest leaves mid-game and the host finishes
+    boxes), the players see them in the game screen's spectator list, they queue ("Ești în coadă", the players see
+    "în coadă"), sees every roll and turn live, the guest leaves mid-game and the host finishes
     alone, the spectator sees the results ("a plecat"), and the new round seats them.
   - `mobile.e2e.ts` (iPhone only): no horizontal scroll on home / lobby / game, dice and score boxes >= 24 px, touch
     taps roll, hold a die and write a box, seen live on the other phone.
-  Rooms are `e2e-test-ui-…`; a leftover is deleted with the service key from the same repo secrets. (Known: finished
-  test games are reported to the hub leaderboard.)
+  Rooms are `e2e-test-ui-…`; a leftover is deleted with the service key from the same repo secrets. (Test rooms are never
+  reported to the hub leaderboard.)
 - Playwright files are `*.e2e.ts`, never `*.spec.ts` / `*.test.ts` (Vitest would pick those up).
 - The UI tests find elements by `data-testid`: `home-submit`, `join-submit`, `leave` (RoomClient), `player-list`,
   `spectator-list`, `ready`, `start-game` (Lobby), `queue-toggle` (QueueButton), `turn-badge`, `round`, `dice`
   (`data-roll` = `turnKey|rolls|dice`), `die` (clickable die, `aria-pressed` = held; Dice.tsx), `roll`, `score-box`
-  (`data-category`, `data-points`), `score-value` (`data-category`), `spectator-status`, `results`, `new-round` (Game).
+  (`data-category`, `data-points`), `score-value` (`data-category`), `spectator-status`, `results`, `new-round` (Game), `game-spectators` (SpectatorPanel, in-game spectator/queue list).
   Renaming or removing one breaks `tests/ui`.
 - Dev server (only if the user asks): `npm run dev -- -p 3011` (`.claude/launch.json` → `yams-dev`).
