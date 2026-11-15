@@ -20,7 +20,7 @@ interface SeatRow {
 // In the lobby you sit at the table. During (or right after) a game you watch, and sit down at the next one.
 // A nickname that already has a seat in the room (player or spectator) reclaims that seat - same player id,
 // same role, new token - when the request comes from the same device or the seat has been disconnected for
-// 45 s. This also works mid-game: the reclaimed player keeps their score sheet and turn.
+// 301 s (DISCONNECT_MS). This also works mid-game: the reclaimed player keeps their score sheet and turn.
 export async function POST(req: Request, ctx: RouteContext<"/api/rooms/[code]/join">) {
   return handle(async () => {
     const { code } = await ctx.params;

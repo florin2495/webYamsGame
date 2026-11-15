@@ -17,7 +17,7 @@ import {
 import { PREF_NICKNAME, useStringPref, writePref } from "@/lib/client/prefs";
 import { realtimeClient } from "@/lib/client/realtime";
 import { roomTopic } from "@/lib/topic";
-import { minutesLabel, NICKNAME_MAX, ROOM_IDLE_MINUTES } from "@/lib/game";
+import { NICKNAME_MAX } from "@/lib/game";
 import type { RoomState } from "@/lib/types";
 import { FeedbackButton } from "./FeedbackButton";
 import { Game } from "./Game";
@@ -26,7 +26,7 @@ import { Lobby } from "./Lobby";
 import { SettingsPanel } from "./SettingsPanel";
 import { Button, Card, ErrorText, Field } from "./ui";
 
-const POLL_MS = 15_000;
+const POLL_MS = 60_000;
 /** Back after being hidden/offline this long: rebuild the Realtime channel (the socket is likely dead). */
 const RECONNECT_AFTER_MS = 5_000;
 /** Delay before rebuilding a channel that reported an error, so a broken socket does not spin. */
@@ -163,7 +163,7 @@ function Room({ code, token }: { code: string; token: string }) {
       <main className="mx-auto flex max-w-md flex-col items-center gap-4 px-4 py-12 text-center">
         <p className="text-lg font-semibold">Camera {code} nu mai există.</p>
         <p className="text-sm text-zinc-500">
-          Camerele se închid automat după {minutesLabel(ROOM_IDLE_MINUTES)} în care nimeni nu le are deschise.
+          A fost închisă după inactivitate sau toți au ieșit din ea.
         </p>
         <Link href="/" className="font-semibold text-indigo-600 underline">
           Înapoi la început

@@ -7,7 +7,7 @@ import { cleanupAbandonedRooms, cleanupExpiredRooms, parseSettings, withDefaults
 import type { RoomListItem } from "@/lib/types";
 
 // GET /api/rooms - public list of every room: lobbies (join to play), running and just-finished games (join to watch, play the next one). Idle rooms are deleted by cleanupExpiredRooms.
-// Loading the list ("Intră în cameră") first sweeps abandoned rooms: no member seen and no activity for 120 s.
+// Loading the list ("Intră în cameră") first sweeps abandoned rooms: no member seen and no activity for 600 s (ROOM_ABANDONED_MS).
 export async function GET() {
   await connection(); // always request-time, never prerendered at build
   return handle(async () => {
@@ -63,9 +63,11 @@ export async function POST(req: Request) {
     if (!room) fail(503, "Nu am putut genera un cod de cameră. Încearcă din nou.");
 
     const token = newPlayerToken();
+    // The creator takes the first seat (seat 0): members without a seat sort after every seated one (sortBySeat),
+    // so a spectator seated in the lobby (/queue gives it a seat number) could otherwise go before the host.
     const { data: player, error: playerError } = await db()
       .from(T.players)
-      .insert({ room_id: room.id, nickname, token_hash: hashToken(token), device_hash: hashDeviceId(body.deviceId), is_host: true, role: "player" })
+      .insert({ room_id: room.id, nickname, token_hash: hashToken(token), device_hash: hashDeviceId(body.deviceId), is_host: true, role: "player", seat: 0 })
       .select("id")
       .single();
     if (playerError) throw playerError;

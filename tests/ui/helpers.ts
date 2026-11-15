@@ -3,7 +3,7 @@
 // Dice are random: every move is picked from what the screen shows (the "Scrie N la …" boxes), never hard-coded.
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
-/** A change has to show up on another screen within this, without a reload. Polling alone takes up to 15 s. */
+/** A change has to show up on another screen within this, without a reload. Polling alone takes up to 60 s. */
 export const REALTIME_MS = 5_000;
 
 /** Longest turn timer: the tests never get close to it, so no turn is played automatically. */

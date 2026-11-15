@@ -1,6 +1,6 @@
 // Scenario 1: two real browsers play a full live Yams game on the deployed site: create, join by link, ready, start,
 // 13 rounds each (roll, then the best box on screen), every roll and every turn change reaching the other player
-// through Realtime (well under the 15 s polling fallback), the results on both screens, a new round followed live,
+// through Realtime (well under the 60 s polling fallback), the results on both screens, a new round followed live,
 // leave. Runs on every project.
 import { expect, test } from "@playwright/test";
 import { createRoom, joinRoom, leaveAll, playTurns, readyAndStart, REALTIME_MS, withPlayers } from "./helpers";
